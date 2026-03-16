@@ -1,0 +1,25 @@
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
+
+from .views import (
+    AnaliticasAdminViewSet,
+    EvaluacionEnsayoViewSet,
+    EstudianteExamenViewSet,
+    IntentoExamenViewSet,
+    PlantillaExamenAdminViewSet,
+    PreguntaAdminViewSet,
+    RespuestaEstudianteViewSet,
+)
+
+router = DefaultRouter()
+router.register(r'admin/preguntas', PreguntaAdminViewSet, basename='admin-preguntas')
+router.register(r'admin/plantillas', PlantillaExamenAdminViewSet, basename='admin-plantillas')
+router.register(r'estudiante/examenes', EstudianteExamenViewSet, basename='estudiante-examenes')
+router.register(r'estudiante/mis-intentos', IntentoExamenViewSet, basename='estudiante-intentos')
+router.register(r'estudiante/respuestas', RespuestaEstudianteViewSet, basename='estudiante-respuestas')
+router.register(r'profesor/ensayos', EvaluacionEnsayoViewSet, basename='profesor-ensayos')
+router.register(r'admin/analiticas', AnaliticasAdminViewSet, basename='admin-analiticas')
+
+urlpatterns = [
+    path('', include(router.urls)),
+]
