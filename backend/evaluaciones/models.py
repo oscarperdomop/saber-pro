@@ -21,7 +21,7 @@ class Categoria(models.Model):
 
 
 class Competencia(models.Model):
-    categoria = models.ForeignKey(Categoria, on_delete=models.CASCADE)
+    modulo = models.ForeignKey(ModuloPrueba, on_delete=models.CASCADE)
     nombre = models.CharField(max_length=100)
 
     def __str__(self):
@@ -65,7 +65,7 @@ class OpcionRespuesta(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     pregunta = models.ForeignKey(Pregunta, related_name='opciones', on_delete=models.CASCADE)
     texto = models.TextField(null=True, blank=True)
-    imagen = models.ImageField(upload_to='preguntas/opciones/', null=True, blank=True)
+    imagen = models.ImageField(upload_to='opciones/', null=True, blank=True)
     es_correcta = models.BooleanField(default=False)
 
     def __str__(self):
@@ -77,6 +77,7 @@ class PlantillaExamen(models.Model):
         ('Borrador', 'Borrador'),
         ('Activo', 'Activo'),
         ('Inactivo', 'Inactivo'),
+        ('Archivado', 'Archivado'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

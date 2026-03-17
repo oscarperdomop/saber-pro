@@ -1,0 +1,246 @@
+import type { AxiosError } from 'axios'
+import { useQuery } from '@tanstack/react-query'
+import { useParams } from 'react-router-dom'
+import evaluacionesService from '../services/evaluacionesService'
+import type { PuntajeModuloResultado, ResumenResultados } from '../../../types/evaluaciones'
+
+interface ApiErrorResponse {
+  detail?: string
+}
+
+const clampPercentil = (value: number): number => {
+  if (value < 0) return 0
+  if (value > 100) return 100
+  return value
+}
+
+const PercentileScale = ({
+  percentil,
+  groupPercentil,
+}: {
+  percentil: number
+  groupPercentil: number
+}) => {
+  const safePercentil = clampPercentil(percentil)
+  const safeGroupPercentil = clampPercentil(groupPercentil)
+
+  return (
+    <div className="relative mx-auto w-full max-w-xs px-2 py-3">
+      <div className="relative h-[2px] w-full bg-usco-gris/60">
+        {[0, 25, 50, 75, 100].map((tick) => (
+          <div
+            key={tick}
+            className="absolute top-1/2 h-2 w-[2px] -translate-y-1/2 bg-usco-gris/70"
+            style={{ left: `${tick}%` }}
+          />
+        ))}
+
+        <div className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-usco-gris/70 bg-white" />
+        <span className="absolute -top-2 -translate-x-1/2 text-[10px] font-semibold text-usco-gris/80" style={{ left: '100%' }}>
+          100
+        </span>
+
+        <div className="absolute top-1/2 -translate-x-1/2" style={{ left: `${safeGroupPercentil}%` }}>
+          <div className="relative">
+            <svg width="10" height="8" viewBox="0 0 10 8" className="translate-y-0.5">
+              <polygon points="5,0 10,8 0,8" fill="currentColor" className="text-usco-gris" />
+            </svg>
+            <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold text-usco-gris">
+              {safeGroupPercentil}
+            </span>
+          </div>
+        </div>
+
+        <div className="absolute top-1/2 -translate-x-1/2" style={{ left: `${safePercentil}%` }}>
+          <div className="relative">
+            <svg width="10" height="8" viewBox="0 0 10 8" className="-translate-y-2.5">
+              <polygon
+                points="5,8 10,0 0,0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                className="text-usco-vino"
+              />
+            </svg>
+            <span className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-usco-vino">
+              {safePercentil}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const ResultadosExamenPage = () => {
+  const { intentoId } = useParams<{ intentoId: string }>()
+
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+  } = useQuery<ResumenResultados, AxiosError<ApiErrorResponse>>({
+    queryKey: ['resumenResultados', intentoId],
+    queryFn: () => evaluacionesService.getResumenResultados(intentoId as string),
+    enabled: Boolean(intentoId),
+  })
+
+  if (!intentoId) {
+    return (
+      <section className="rounded-xl border border-red-300 bg-red-50 p-6 text-sm text-red-700">
+        Intento no valido.
+      </section>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-usco-gris shadow-sm">
+        Cargando resultados...
+      </section>
+    )
+  }
+
+  if (isError && error.response?.status === 403) {
+    return (
+      <section className="rounded-2xl border border-usco-ocre/80 bg-white p-10 text-center shadow-sm">
+        <h1 className="text-4xl font-bold text-usco-vino">
+          Examen Finalizado! Tus resultados estaran disponibles cuando cierre la ventana del
+          simulacro.
+        </h1>
+      </section>
+    )
+  }
+
+  if (isError) {
+    return (
+      <section className="rounded-xl border border-red-300 bg-red-50 p-6 text-sm text-red-700">
+        {error.response?.data?.detail ?? 'No fue posible cargar el resumen de resultados.'}
+      </section>
+    )
+  }
+
+  if (!data) {
+    return (
+      <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-usco-gris shadow-sm">
+        No hay resultados disponibles por el momento.
+      </section>
+    )
+  }
+
+  const modulos: PuntajeModuloResultado[] = data.puntajes_por_modulo ?? []
+  const groupPercentil = clampPercentil(Math.round((data.puntaje_saber_pro / 300) * 100))
+
+  return (
+    <section className="mx-auto w-full max-w-6xl space-y-6">
+      <header className="rounded-2xl border border-usco-gris/50 bg-white p-8 text-center shadow-sm">
+        <p className="text-sm uppercase tracking-[0.2em] text-usco-gris">Puntaje Saber Pro</p>
+        <p className="mt-3 text-6xl font-bold text-usco-vino">{data.puntaje_saber_pro}</p>
+        <p className="mt-3 text-base text-usco-gris">
+          Aciertos: {data.aciertos_brutos} de {data.total_preguntas} preguntas
+        </p>
+      </header>
+
+      {data.estado_calificacion === 'Parcial' && (
+        <aside className="rounded-xl border border-yellow-300 bg-usco-ocre p-4 text-sm text-yellow-900">
+          Tu nota es parcial porque tienes ensayos pendientes de calificacion por un profesor.
+        </aside>
+      )}
+
+      <section className="space-y-3">
+        <h2 className="text-center text-3xl font-semibold tracking-wide text-usco-gris">
+          •RESULTADOS POR MODULOS•
+        </h2>
+
+        <div className="overflow-x-auto border-2 border-usco-gris/80 bg-white shadow-sm">
+          <div className="min-w-[920px]">
+            <div className="border-b-2 border-usco-gris/80 bg-usco-vino px-5 py-3 text-center">
+              <p className="text-xl font-bold uppercase tracking-wide text-white">
+                MODULOS COMPETENCIAS GENERICAS
+              </p>
+            </div>
+
+            <table className="w-full">
+              <thead>
+                <tr className="border-b-2 border-usco-gris/80 bg-usco-fondo">
+                  <th className="w-[30%] border-r-2 border-usco-gris/80 px-4 py-3 text-left text-2xl font-semibold text-usco-gris">
+                    MODULOS
+                  </th>
+                  <th className="w-[20%] border-r-2 border-usco-gris/80 px-4 py-3 text-center text-2xl font-semibold text-usco-gris">
+                    PUNTAJE POR MODULO
+                  </th>
+                  <th className="w-[50%] px-4 py-3 text-center text-2xl font-semibold text-usco-gris">
+                    EN QUE PERCENTIL SE ENCUENTRA?
+                  </th>
+                </tr>
+                <tr className="border-b-2 border-usco-gris/80 bg-white">
+                  <th className="border-r-2 border-usco-gris/80 px-4 py-2" />
+                  <th className="border-r-2 border-usco-gris/80 px-4 py-2 text-center text-sm font-normal text-usco-gris">
+                    De 300 puntos posibles, su puntaje es
+                  </th>
+                  <th className="px-4 py-2" />
+                </tr>
+              </thead>
+
+              <tbody>
+                {modulos.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-5 py-6 text-sm text-usco-gris">
+                      No hay desglose por modulos disponible para este intento.
+                    </td>
+                  </tr>
+                )}
+
+                {modulos.map((modulo, index) => (
+                  <tr
+                    key={`${modulo.modulo}-${index}`}
+                    className={`border-b border-usco-gris/70 last:border-b-0 ${
+                      index % 2 === 0 ? 'bg-white' : 'bg-usco-fondo/60'
+                    }`}
+                  >
+                    <td className="border-r-2 border-usco-gris/80 px-4 py-6 text-2xl font-medium leading-tight text-usco-gris">
+                      {modulo.modulo}
+                    </td>
+                    <td className="border-r-2 border-usco-gris/80 px-4 py-6 text-center text-4xl font-bold text-usco-vino">
+                      {modulo.puntaje}
+                    </td>
+                    <td className="px-4 py-4">
+                      <PercentileScale
+                        percentil={modulo.percentil}
+                        groupPercentil={groupPercentil}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-center gap-8 pt-1 text-xs text-usco-gris">
+          <div className="flex items-center gap-2">
+            <svg width="10" height="8" viewBox="0 0 10 8">
+              <polygon
+                points="5,8 10,0 0,0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                className="text-usco-vino"
+              />
+            </svg>
+            <span>Su percentil</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <svg width="10" height="8" viewBox="0 0 10 8">
+              <polygon points="5,0 10,8 0,8" fill="currentColor" className="text-usco-gris" />
+            </svg>
+            <span>Percentil del grupo</span>
+          </div>
+        </div>
+      </section>
+    </section>
+  )
+}
+
+export default ResultadosExamenPage

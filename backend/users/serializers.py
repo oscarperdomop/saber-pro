@@ -2,6 +2,8 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from .models import ProgramaAcademico, Usuario
+
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
@@ -45,3 +47,28 @@ class CambiarPasswordSerializer(serializers.Serializer):
 
         validate_password(value, user)
         return value
+
+
+class UsuarioListadoSerializer(serializers.ModelSerializer):
+    numero_documento = serializers.CharField(source='documento', read_only=True)
+    programa = serializers.CharField(source='programa.nombre', read_only=True)
+
+    class Meta:
+        model = Usuario
+        fields = [
+            'id',
+            'nombres',
+            'apellidos',
+            'correo_institucional',
+            'tipo_documento',
+            'numero_documento',
+            'is_staff',
+            'is_active',
+            'programa',
+        ]
+
+
+class ProgramaAcademicoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProgramaAcademico
+        fields = ['id', 'nombre']

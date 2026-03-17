@@ -1,6 +1,10 @@
 import pandas as pd
+from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
@@ -8,7 +12,12 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import ProgramaAcademico, Usuario
-from .serializers import CambiarPasswordSerializer, CustomTokenObtainPairSerializer
+from .serializers import (
+    CambiarPasswordSerializer,
+    CustomTokenObtainPairSerializer,
+    ProgramaAcademicoSerializer,
+    UsuarioListadoSerializer,
+)
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -58,11 +67,15 @@ class CargaMasivaUsuariosView(APIView):
     def _limit_length(value, max_len):
         return value[:max_len]
 
+    @staticmethod
+    def _to_upper(value):
+        return value.upper() if isinstance(value, str) else value
+
     def post(self, request):
-        archivo = request.FILES.get('archivo')
+        archivo = request.FILES.get('archivo') or request.FILES.get('file')
         if not archivo:
             return Response(
-                {'detalle': "Debes enviar un archivo en el campo 'archivo'."},
+                {'detalle': "Debes enviar un archivo en el campo 'archivo' o 'file'."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -71,7 +84,8 @@ class CargaMasivaUsuariosView(APIView):
         if nombre_archivo.endswith('.xlsx'):
             df = pd.read_excel(archivo)
         elif nombre_archivo.endswith('.csv'):
-            df = pd.read_csv(archivo)
+            # Detecta delimitador automaticamente (coma, punto y coma, tab, etc.)
+            df = pd.read_csv(archivo, sep=None, engine='python')
         else:
             return Response(
                 {'detalle': 'Formato de archivo no soportado. Usa .xlsx o .csv.'},
@@ -91,10 +105,16 @@ class CargaMasivaUsuariosView(APIView):
                     nombres = self._limit_length(self._clean_value(row.get('nombres')), 100)
                     apellidos = self._limit_length(self._clean_value(row.get('apellidos')), 100)
                     correo_institucional = self._limit_length(
-                        self._clean_value(row.get('correo_institucional')),
+                        self._clean_value(row.get('correo_institucional')).lower(),
                         254,
                     )
                     nombre_programa = self._limit_length(self._clean_value(row.get('programa')), 150)
+
+                    documento = self._to_upper(documento)
+                    tipo_documento = self._to_upper(tipo_documento)
+                    nombres = self._to_upper(nombres)
+                    apellidos = self._to_upper(apellidos)
+                    nombre_programa = self._to_upper(nombre_programa)
 
                     if not all(
                         [
@@ -113,8 +133,12 @@ class CargaMasivaUsuariosView(APIView):
 
                     codigo_snies = self._clean_value(row.get('codigo_snies')) or documento
                     codigo_snies = self._limit_length(codigo_snies, 15)
-                    facultad = self._limit_length(self._clean_value(row.get('facultad')) or 'Sin definir', 100)
-                    sede = self._limit_length(self._clean_value(row.get('sede')) or 'Principal', 50)
+                    facultad = self._limit_length(self._clean_value(row.get('facultad')) or 'SIN DEFINIR', 100)
+                    sede = self._limit_length(self._clean_value(row.get('sede')) or 'PRINCIPAL', 50)
+
+                    codigo_snies = self._to_upper(codigo_snies)
+                    facultad = self._to_upper(facultad)
+                    sede = self._to_upper(sede)
 
                     programa_obj, _ = ProgramaAcademico.objects.get_or_create(
                         nombre=nombre_programa,
@@ -144,3 +168,121 @@ class CargaMasivaUsuariosView(APIView):
             {'total_procesados': len(df), 'creados': creados, 'errores': errores},
             status=status.HTTP_200_OK,
         )
+
+
+class UsuariosListView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    class UsuariosPagination(PageNumberPagination):
+        page_size = 10
+        page_size_query_param = 'page_size'
+        max_page_size = 50
+
+    def get(self, request):
+        usuarios = Usuario.objects.select_related('programa').all().order_by('nombres', 'apellidos')
+        search = (request.query_params.get('search') or '').strip()
+
+        if search:
+            usuarios = usuarios.filter(
+                Q(nombres__icontains=search)
+                | Q(apellidos__icontains=search)
+                | Q(correo_institucional__icontains=search)
+                | Q(documento__icontains=search)
+            )
+
+        paginator = self.UsuariosPagination()
+        page = paginator.paginate_queryset(usuarios, request, view=self)
+        serializer = UsuarioListadoSerializer(page, many=True)
+
+        return paginator.get_paginated_response(serializer.data)
+
+
+class ProgramasListView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, _request):
+        programas = ProgramaAcademico.objects.all().order_by('nombre')
+        serializer = ProgramaAcademicoSerializer(programas, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class UsuariosEstadoUpdateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    @staticmethod
+    def _parse_bool(value):
+        if isinstance(value, bool):
+            return value
+
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {'true', '1', 'yes', 'si'}:
+                return True
+            if normalized in {'false', '0', 'no'}:
+                return False
+
+        return None
+
+    def patch(self, request, user_id):
+        usuario = get_object_or_404(Usuario, id=user_id)
+        payload = request.data
+        campos_perfil = {
+            'nombres',
+            'apellidos',
+            'correo_institucional',
+            'tipo_documento',
+            'numero_documento',
+            'documento',
+        }
+        requiere_actualizacion_estado = 'is_active' in payload
+        requiere_actualizacion_perfil = any(campo in payload for campo in campos_perfil)
+
+        if not requiere_actualizacion_estado and not requiere_actualizacion_perfil:
+            return Response(
+                {'detalle': 'No se enviaron campos validos para actualizar.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        update_fields = []
+
+        if requiere_actualizacion_estado:
+            is_active = self._parse_bool(payload.get('is_active'))
+            if is_active is None:
+                return Response(
+                    {'detalle': "El campo 'is_active' es obligatorio y debe ser booleano."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            usuario.is_active = is_active
+            update_fields.append('is_active')
+
+        if requiere_actualizacion_perfil:
+            if 'nombres' in payload:
+                usuario.nombres = str(payload.get('nombres') or '').strip().upper()
+                update_fields.append('nombres')
+
+            if 'apellidos' in payload:
+                usuario.apellidos = str(payload.get('apellidos') or '').strip().upper()
+                update_fields.append('apellidos')
+
+            if 'correo_institucional' in payload:
+                usuario.correo_institucional = str(payload.get('correo_institucional') or '').strip().lower()
+                update_fields.append('correo_institucional')
+
+            if 'tipo_documento' in payload:
+                usuario.tipo_documento = str(payload.get('tipo_documento') or '').strip().upper()
+                update_fields.append('tipo_documento')
+
+            if 'numero_documento' in payload or 'documento' in payload:
+                documento = payload.get('numero_documento', payload.get('documento'))
+                usuario.documento = str(documento or '').strip().upper()
+                update_fields.append('documento')
+
+        try:
+            usuario.full_clean()
+        except ValidationError as exc:
+            return Response(exc.message_dict, status=status.HTTP_400_BAD_REQUEST)
+
+        usuario.save(update_fields=list(dict.fromkeys(update_fields)))
+
+        serializer = UsuarioListadoSerializer(usuario)
+        return Response(serializer.data, status=status.HTTP_200_OK)
