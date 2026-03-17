@@ -1,0 +1,4 @@
+interface:
+  display_name: "USCO Frontend Architect"
+  short_description: "React/TS enterprise frontend para Saber Pro USCO"
+  default_prompt: "Use $usco-react-frontend-architect to build or refactor a typed, high-performance React frontend for Saber Pro with USCO branding and DRF integration."
