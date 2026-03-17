@@ -54,3 +54,8 @@ pnpm-debug.log*
 *.log
 *.tmp
 *.swp
+
+# -----------------------------
+# Local skills
+# -----------------------------
+skills/usco-react-frontend-architect/
