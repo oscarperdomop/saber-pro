@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import evaluacionesService from '../services/evaluacionesService'
+import SaberProLoader from '../../../components/ui/SaberProLoader'
+import estudianteService from '../services/estudianteService'
 import type { RespuestaEstudiante } from '../../../types/evaluaciones'
 
 interface ApiErrorResponse {
@@ -14,6 +15,8 @@ interface GuardarRespuestaVariables {
   respuestaId: string
   opcionId: string
 }
+
+type RespuestasLocalState = Record<string, string>
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/').replace(/\/+$/, '')
 const backendOrigin = (() => {
@@ -59,7 +62,51 @@ const PresentarExamenPage = () => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [preguntaActivaIndex, setPreguntaActivaIndex] = useState(0)
+  const [respuestasLocales, setRespuestasLocales] = useState<RespuestasLocalState>({})
+  const [showRecoveredMessage, setShowRecoveredMessage] = useState(false)
   const opcionesPorRespuestaRef = useRef<Record<string, string[]>>({})
+  const storageKey = intentoId ? `simulacro_estado_${intentoId}` : ''
+
+  useEffect(() => {
+    if (!storageKey) {
+      setRespuestasLocales({})
+      setShowRecoveredMessage(false)
+      return
+    }
+
+    const guardado = localStorage.getItem(storageKey)
+    if (!guardado) {
+      setRespuestasLocales({})
+      setShowRecoveredMessage(false)
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(guardado) as RespuestasLocalState
+      if (parsed && typeof parsed === 'object') {
+        setRespuestasLocales(parsed)
+        if (Object.keys(parsed).length > 0) {
+          setShowRecoveredMessage(true)
+        }
+      }
+    } catch {
+      localStorage.removeItem(storageKey)
+      setRespuestasLocales({})
+      setShowRecoveredMessage(false)
+    }
+  }, [storageKey])
+
+  useEffect(() => {
+    if (!showRecoveredMessage) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowRecoveredMessage(false)
+    }, 3500)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [showRecoveredMessage])
 
   const {
     data: respuestas = [],
@@ -68,13 +115,36 @@ const PresentarExamenPage = () => {
     error,
   } = useQuery<RespuestaEstudiante[], AxiosError<ApiErrorResponse>>({
     queryKey: ['respuestas', intentoId],
-    queryFn: () => evaluacionesService.getRespuestasIntento(intentoId as string),
+    queryFn: () => estudianteService.getRespuestasIntento(intentoId as string),
     enabled: Boolean(intentoId),
   })
 
   useEffect(() => {
     opcionesPorRespuestaRef.current = {}
   }, [moduloId, intentoId])
+
+  useEffect(() => {
+    if (!storageKey || respuestas.length === 0) {
+      return
+    }
+
+    const desdeBackend: RespuestasLocalState = {}
+    respuestas.forEach((respuesta) => {
+      if (respuesta.opcion_seleccionada) {
+        desdeBackend[respuesta.id] = respuesta.opcion_seleccionada
+      }
+    })
+
+    if (Object.keys(desdeBackend).length === 0) {
+      return
+    }
+
+    setRespuestasLocales((prev) => {
+      const merged = { ...desdeBackend, ...prev }
+      localStorage.setItem(storageKey, JSON.stringify(merged))
+      return merged
+    })
+  }, [respuestas, storageKey])
 
   const respuestasModulo = useMemo(() => {
     if (!respuestas || !moduloId) {
@@ -122,7 +192,7 @@ const PresentarExamenPage = () => {
     GuardarRespuestaVariables
   >({
     mutationFn: ({ respuestaId, opcionId }) =>
-      evaluacionesService.guardarRespuesta(respuestaId, opcionId),
+      estudianteService.guardarRespuesta(respuestaId, opcionId),
     onSuccess: async () => {
       if (!intentoId) {
         return
@@ -131,6 +201,21 @@ const PresentarExamenPage = () => {
       await queryClient.invalidateQueries({ queryKey: ['respuestas', intentoId] })
     },
   })
+
+  const handleSeleccionarOpcion = (respuestaId: string, opcionId: string) => {
+    setRespuestasLocales((prev) => {
+      const updated = { ...prev, [respuestaId]: opcionId }
+      if (storageKey) {
+        localStorage.setItem(storageKey, JSON.stringify(updated))
+      }
+      return updated
+    })
+
+    guardarRespuestaMutation.mutate({
+      respuestaId,
+      opcionId,
+    })
+  }
 
   useEffect(() => {
     if (respuestasModulo.length === 0) {
@@ -179,7 +264,8 @@ const PresentarExamenPage = () => {
           <div className="mt-4 grid grid-cols-5 gap-2 sm:grid-cols-8 lg:grid-cols-4">
             {respuestasModulo.map((respuesta, index) => {
               const isActive = index === preguntaActivaIndex
-              const isAnswered = respuesta.opcion_seleccionada !== null
+              const opcionSeleccionada = respuestasLocales[respuesta.id] ?? respuesta.opcion_seleccionada
+              const isAnswered = opcionSeleccionada !== null
 
               return (
                 <button
@@ -216,8 +302,14 @@ const PresentarExamenPage = () => {
 
           <div className="flex-1 overflow-y-auto p-6">
             {isLoading && (
-              <div className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-usco-gris shadow-sm">
-                Cargando tu examen...
+              <div className="rounded-xl border border-usco-ocre/80 bg-white p-6 shadow-sm">
+                <SaberProLoader mensaje="Cargando tu examen..." />
+              </div>
+            )}
+
+            {!isLoading && !isError && showRecoveredMessage && (
+              <div className="mb-4 rounded-xl border border-usco-ocre/90 bg-usco-fondo p-4 text-sm text-usco-vino">
+                Respuestas recuperadas desde tu sesion anterior.
               </div>
             )}
 
@@ -253,7 +345,9 @@ const PresentarExamenPage = () => {
 
                 <div className="space-y-3">
                   {respuestaActiva.pregunta.opciones.map((opcion, index) => {
-                    const isSelected = opcion.id === respuestaActiva.opcion_seleccionada
+                    const opcionSeleccionadaActual =
+                      respuestasLocales[respuestaActiva.id] ?? respuestaActiva.opcion_seleccionada
+                    const isSelected = opcion.id === opcionSeleccionadaActual
                     const isSavingCurrentAnswer =
                       guardarRespuestaMutation.isPending &&
                       guardarRespuestaMutation.variables?.respuestaId === respuestaActiva.id
@@ -263,12 +357,7 @@ const PresentarExamenPage = () => {
                       <button
                         key={opcion.id}
                         type="button"
-                        onClick={() =>
-                          guardarRespuestaMutation.mutate({
-                            respuestaId: respuestaActiva.id,
-                            opcionId: opcion.id,
-                          })
-                        }
+                        onClick={() => handleSeleccionarOpcion(respuestaActiva.id, opcion.id)}
                         disabled={isSavingCurrentAnswer}
                         className={`w-full rounded-lg border p-4 text-left transition ${
                           isSelected

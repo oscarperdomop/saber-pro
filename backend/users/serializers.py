@@ -5,11 +5,35 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import ProgramaAcademico, Usuario
 
 
+def validate_new_password_rules(user, value):
+    errores = []
+
+    if len(value) < 8:
+        errores.append('La nueva contrasena debe tener al menos 8 caracteres.')
+
+    if not any(char.isupper() for char in value):
+        errores.append('La nueva contrasena debe contener al menos una letra mayuscula.')
+
+    if not any(char.isdigit() for char in value):
+        errores.append('La nueva contrasena debe contener al menos un numero.')
+
+    documento_usuario = getattr(user, 'documento', None)
+    if documento_usuario and value == str(documento_usuario):
+        errores.append('La nueva contrasena no puede ser igual al numero de documento.')
+
+    if errores:
+        raise serializers.ValidationError(errores)
+
+    validate_password(value, user)
+    return value
+
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
 
         data['id'] = str(self.user.id)
+        data['rol'] = self.user.rol
         data['correo_institucional'] = self.user.correo_institucional
         data['nombres'] = self.user.nombres
         data['apellidos'] = self.user.apellidos
@@ -26,27 +50,37 @@ class CambiarPasswordSerializer(serializers.Serializer):
     def validate_password_nueva(self, value):
         request = self.context.get('request')
         user = getattr(request, 'user', None)
+        return validate_new_password_rules(user, value)
 
-        errores = []
 
-        if len(value) < 8:
-            errores.append('La nueva contraseña debe tener al menos 8 caracteres.')
+class MiPerfilSerializer(serializers.ModelSerializer):
+    numero_documento = serializers.CharField(source='documento', read_only=True)
+    programa = serializers.CharField(source='programa.nombre', read_only=True)
 
-        if not any(char.isupper() for char in value):
-            errores.append('La nueva contraseña debe contener al menos una letra mayúscula.')
+    class Meta:
+        model = Usuario
+        fields = [
+            'id',
+            'rol',
+            'nombres',
+            'apellidos',
+            'correo_institucional',
+            'tipo_documento',
+            'numero_documento',
+            'programa',
+            'is_staff',
+            'is_active',
+            'es_primer_ingreso',
+        ]
 
-        if not any(char.isdigit() for char in value):
-            errores.append('La nueva contraseña debe contener al menos un número.')
 
-        documento_usuario = getattr(user, 'documento', None)
-        if documento_usuario and value == str(documento_usuario):
-            errores.append('La nueva contraseña no puede ser igual al número de documento.')
+class ActualizarMiPasswordSerializer(serializers.Serializer):
+    password_nueva = serializers.CharField(write_only=True)
 
-        if errores:
-            raise serializers.ValidationError(errores)
-
-        validate_password(value, user)
-        return value
+    def validate_password_nueva(self, value):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        return validate_new_password_rules(user, value)
 
 
 class UsuarioListadoSerializer(serializers.ModelSerializer):
@@ -57,6 +91,7 @@ class UsuarioListadoSerializer(serializers.ModelSerializer):
         model = Usuario
         fields = [
             'id',
+            'rol',
             'nombres',
             'apellidos',
             'correo_institucional',

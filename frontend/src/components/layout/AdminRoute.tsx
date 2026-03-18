@@ -1,14 +1,7 @@
-import { Navigate, Outlet } from 'react-router-dom'
-import { getStoredUser } from '../../hooks/useAuthStore'
+import RoleRoute from './RoleRoute'
 
 const AdminRoute = () => {
-  const user = getStoredUser()
-
-  if (!user?.is_staff) {
-    return <Navigate to="/dashboard" replace />
-  }
-
-  return <Outlet />
+  return <RoleRoute allowedRoles={['ADMIN']} />
 }
 
 export default AdminRoute

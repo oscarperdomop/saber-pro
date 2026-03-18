@@ -1,7 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
-import AdminRoute from '../components/layout/AdminRoute'
 import MainLayout from '../components/layout/MainLayout'
 import ProtectedRoute from '../components/layout/ProtectedRoute'
+import RoleRoute from '../components/layout/RoleRoute'
 import BancoPreguntasPage from '../features/admin/pages/BancoPreguntasPage'
 import CrearPreguntaPage from '../features/admin/pages/CrearPreguntaPage'
 import CrearSimulacroPage from '../features/admin/pages/CrearSimulacroPage'
@@ -14,32 +14,26 @@ import SimulacrosPage from '../features/admin/pages/SimulacrosPage'
 import UsuariosPage from '../features/admin/pages/UsuariosPage'
 import ActivarCuentaPage from '../features/auth/pages/ActivarCuentaPage'
 import LoginPage from '../features/auth/pages/LoginPage'
+import MiPerfilPage from '../features/auth/pages/MiPerfilPage'
 import DashboardPage from '../features/dashboard/pages/DashboardPage'
-import EvaluacionesPage from '../features/evaluaciones/pages/EvaluacionesPage'
-import ModulosIntentoPage from '../features/evaluaciones/pages/ModulosIntentoPage'
-import PresentarExamenPage from '../features/evaluaciones/pages/PresentarExamenPage'
-import ResultadosExamenPage from '../features/evaluaciones/pages/ResultadosExamenPage'
+import EvaluacionesPage from '../features/estudiante/pages/EvaluacionesPage'
+import ModulosIntentoPage from '../features/estudiante/pages/ModulosIntentoPage'
+import PresentarExamenPage from '../features/estudiante/pages/PresentarExamenPage'
+import ResultadosExamenPage from '../features/estudiante/pages/ResultadosExamenPage'
 
 const AppRouter = () => {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LoginPage />} />
+        <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/activar-cuenta" element={<ActivarCuentaPage />} />
-          <Route
-            path="/evaluaciones/intento/:intentoId/modulo/:moduloId"
-            element={<PresentarExamenPage />}
-          />
-          <Route element={<MainLayout />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/evaluaciones" element={<EvaluacionesPage />} />
-            <Route path="/evaluaciones/intento/:intentoId" element={<ModulosIntentoPage />} />
-            <Route
-              path="/evaluaciones/intento/:intentoId/resultados"
-              element={<ResultadosExamenPage />}
-            />
-            <Route element={<AdminRoute />}>
+
+          <Route element={<RoleRoute allowedRoles={['ADMIN']} />}>
+            <Route element={<MainLayout />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/perfil" element={<MiPerfilPage />} />
               <Route path="/preguntas" element={<BancoPreguntasPage />} />
               <Route path="/preguntas/nueva" element={<CrearPreguntaPage />} />
               <Route path="/preguntas/:preguntaId/editar" element={<EditarPreguntaPage />} />
@@ -50,6 +44,23 @@ const AppRouter = () => {
               <Route path="/simulacros/editar/:id" element={<EditarSimulacroPage />} />
               <Route path="/simulacros/:id/resultados" element={<ResultadosSimulacroPage />} />
               <Route path="/usuarios" element={<UsuariosPage />} />
+            </Route>
+          </Route>
+
+          <Route element={<RoleRoute allowedRoles={['ESTUDIANTE']} />}>
+            <Route
+              path="/evaluaciones/intento/:intentoId/modulo/:moduloId"
+              element={<PresentarExamenPage />}
+            />
+            <Route element={<MainLayout />}>
+              <Route path="/estudiante/dashboard" element={<DashboardPage />} />
+              <Route path="/perfil" element={<MiPerfilPage />} />
+              <Route path="/evaluaciones" element={<EvaluacionesPage />} />
+              <Route path="/evaluaciones/intento/:intentoId" element={<ModulosIntentoPage />} />
+              <Route
+                path="/evaluaciones/intento/:intentoId/resultados"
+                element={<ResultadosExamenPage />}
+              />
             </Route>
           </Route>
         </Route>

@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 from rest_framework.serializers import SerializerMethodField
 
@@ -262,9 +264,58 @@ class PlantillaExamenAdminSerializer(serializers.ModelSerializer):
 
 
 class PlantillaExamenEstudianteSerializer(serializers.ModelSerializer):
+    cantidad_preguntas = serializers.SerializerMethodField()
+    modulos = serializers.SerializerMethodField()
+    dificultad_referencia = serializers.SerializerMethodField()
+
     class Meta:
         model = PlantillaExamen
-        fields = ['id', 'titulo', 'descripcion', 'tiempo_minutos', 'fecha_inicio', 'fecha_fin']
+        fields = [
+            'id',
+            'titulo',
+            'descripcion',
+            'tiempo_minutos',
+            'fecha_inicio',
+            'fecha_fin',
+            'cantidad_preguntas',
+            'modulos',
+            'dificultad_referencia',
+        ]
+
+    @staticmethod
+    def get_cantidad_preguntas(obj):
+        return sum((regla.cantidad_preguntas or 0) for regla in obj.reglas.all())
+
+    @staticmethod
+    def get_modulos(obj):
+        nombres = []
+        for regla in obj.reglas.select_related('modulo').all():
+            nombre = str(getattr(regla.modulo, 'nombre', '') or '').strip()
+            if nombre and nombre not in nombres:
+                nombres.append(nombre)
+        return nombres
+
+    @staticmethod
+    def get_dificultad_referencia(obj):
+        dificultades = []
+        for regla in obj.reglas.all():
+            nivel = str(getattr(regla, 'nivel_dificultad', '') or '').strip()
+            if nivel and nivel not in dificultades:
+                dificultades.append(nivel)
+
+        if not dificultades:
+            return 'Intermedio'
+
+        if len(dificultades) > 1:
+            return 'Mixto'
+
+        nivel = dificultades[0]
+        return {
+            'Facil': 'Basico',
+            'Medio': 'Intermedio',
+            'Dificil': 'Avanzado',
+            'Balanceada': 'Intermedio',
+        }.get(nivel, 'Intermedio')
 
 
 class OpcionRespuestaEstudianteSerializer(serializers.ModelSerializer):
@@ -313,9 +364,41 @@ class RespuestaEstudianteUpdateSerializer(serializers.ModelSerializer):
 
 
 class IntentoExamenSerializer(serializers.ModelSerializer):
+    plantilla_titulo = serializers.CharField(source='plantilla_examen.titulo', read_only=True)
+    puntaje_global = serializers.SerializerMethodField()
+
     class Meta:
         model = IntentoExamen
-        fields = ['id', 'plantilla_examen', 'fecha_inicio', 'fecha_finalizacion', 'estado']
+        fields = [
+            'id',
+            'plantilla_examen',
+            'plantilla_titulo',
+            'fecha_inicio',
+            'fecha_finalizacion',
+            'estado',
+            'puntaje_global',
+            'plan_estudio_ia',
+        ]
+
+    @staticmethod
+    def get_puntaje_global(obj):
+        respuestas = list(obj.respuestas.all())
+        total_preguntas = len(respuestas)
+        if total_preguntas == 0:
+            return 0
+
+        aciertos_multiples = 0
+        puntaje_ensayos = Decimal('0')
+
+        for respuesta in respuestas:
+            if respuesta.opcion_seleccionada_id and respuesta.opcion_seleccionada.es_correcta:
+                aciertos_multiples += 1
+
+            if respuesta.pregunta.limite_palabras is not None and respuesta.puntaje_calificado is not None:
+                puntaje_ensayos += respuesta.puntaje_calificado
+
+        total_aciertos = Decimal(aciertos_multiples) + puntaje_ensayos
+        return round((float(total_aciertos) / total_preguntas) * 300)
 
 
 class PreguntaEnsayoSerializer(serializers.ModelSerializer):

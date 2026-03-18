@@ -3,7 +3,8 @@ import type { AxiosError } from 'axios'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import ConfirmDialog from '../../../components/ui/ConfirmDialog'
-import evaluacionesService from '../services/evaluacionesService'
+import SaberProLoader from '../../../components/ui/SaberProLoader'
+import estudianteService from '../services/estudianteService'
 import type { RespuestaEstudiante } from '../../../types/evaluaciones'
 
 interface ApiErrorResponse {
@@ -30,7 +31,7 @@ const ModulosIntentoPage = () => {
     error,
   } = useQuery<RespuestaEstudiante[], AxiosError<ApiErrorResponse>>({
     queryKey: ['respuestas', intentoId],
-    queryFn: () => evaluacionesService.getRespuestasIntento(intentoId as string),
+    queryFn: () => estudianteService.getRespuestasIntento(intentoId as string),
     enabled: Boolean(intentoId),
   })
 
@@ -83,8 +84,11 @@ const ModulosIntentoPage = () => {
 
   const finalizarIntentoMutation = useMutation<{ estado: string }, AxiosError<ApiErrorResponse>, string>(
     {
-      mutationFn: evaluacionesService.finalizarIntento,
+      mutationFn: estudianteService.finalizarIntento,
       onSuccess: () => {
+        if (intentoId) {
+          localStorage.removeItem(`simulacro_estado_${intentoId}`)
+        }
         navigate(`/evaluaciones/intento/${intentoId}/resultados`)
       },
     },
@@ -119,8 +123,8 @@ const ModulosIntentoPage = () => {
       </header>
 
       {isLoading && (
-        <div className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-usco-gris shadow-sm">
-          Cargando modulos...
+        <div className="rounded-xl border border-usco-ocre/80 bg-white p-6 shadow-sm">
+          <SaberProLoader mensaje="Cargando modulos..." />
         </div>
       )}
 

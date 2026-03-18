@@ -3,7 +3,8 @@ import type { AxiosError } from 'axios'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { CalendarDays, Clock3 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import evaluacionesService from '../services/evaluacionesService'
+import SaberProLoader from '../../../components/ui/SaberProLoader'
+import estudianteService from '../services/estudianteService'
 import type {
   IniciarIntentoResponse,
   IntentoPrevio,
@@ -52,7 +53,7 @@ const EvaluacionesPage = () => {
     error: examenesError,
   } = useQuery<PlantillaExamen[], AxiosError<ApiErrorResponse>>({
     queryKey: ['examenesDisponibles'],
-    queryFn: evaluacionesService.getExamenesDisponibles,
+    queryFn: estudianteService.getExamenesDisponibles,
   })
 
   const {
@@ -62,7 +63,7 @@ const EvaluacionesPage = () => {
     error: intentosError,
   } = useQuery<IntentoPrevio[], AxiosError<ApiErrorResponse>>({
     queryKey: ['misIntentos'],
-    queryFn: evaluacionesService.getMisIntentos,
+    queryFn: estudianteService.getMisIntentos,
   })
 
   const iniciarIntentoMutation = useMutation<
@@ -70,7 +71,7 @@ const EvaluacionesPage = () => {
     AxiosError<ApiErrorResponse>,
     string
   >({
-    mutationFn: evaluacionesService.iniciarIntento,
+    mutationFn: estudianteService.iniciarIntento,
     onMutate: (examenId) => {
       setInicioError((prev) => (prev?.examenId === examenId ? null : prev))
     },
@@ -114,8 +115,8 @@ const EvaluacionesPage = () => {
       </header>
 
       {isLoading && (
-        <div className="rounded-lg border border-usco-ocre/80 bg-white p-6 text-usco-gris shadow-sm">
-          Cargando simulacros...
+        <div className="rounded-lg border border-usco-ocre/80 bg-white p-6 shadow-sm">
+          <SaberProLoader mensaje="Cargando simulacros..." />
         </div>
       )}
 

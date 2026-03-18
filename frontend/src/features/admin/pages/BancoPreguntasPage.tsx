@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AxiosError } from 'axios'
 import { useQuery } from '@tanstack/react-query'
+import {
+  BookOpen,
+  Calculator,
+  FileQuestion,
+  Filter,
+  Globe,
+  MessageSquare,
+  Plus,
+  Search,
+  SortAsc,
+  Users2,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import preguntasService from '../services/preguntasService'
 import type { Modulo, Pregunta } from '../../../types/preguntas'
@@ -18,6 +31,15 @@ interface ModuloGroup {
     media: number
     alta: number
   }
+}
+
+interface ModuloTheme {
+  icon: LucideIcon
+  gradient: string
+  cardBorder: string
+  bgSoft: string
+  text: string
+  button: string
 }
 
 const getModuloNombre = (pregunta: Pregunta): string => {
@@ -54,9 +76,114 @@ const getDificultadKey = (dificultad: string): 'facil' | 'media' | 'alta' => {
   return 'alta'
 }
 
+const getDificultadLabel = (dificultad: string): string => {
+  const key = getDificultadKey(dificultad)
+
+  if (key === 'facil') {
+    return 'Facil'
+  }
+
+  if (key === 'media') {
+    return 'Media'
+  }
+
+  return 'Alta'
+}
+
+const getModuloTheme = (modulo: string): ModuloTheme => {
+  const normalized = modulo.trim().toLowerCase()
+
+  if (normalized.includes('lectura')) {
+    return {
+      icon: BookOpen,
+      gradient: 'from-usco-vino to-[#741017]',
+      cardBorder: 'border-usco-ocre/80',
+      bgSoft: 'bg-usco-vino/10',
+      text: 'text-usco-vino',
+      button: 'bg-usco-vino hover:bg-[#741017]',
+    }
+  }
+
+  if (normalized.includes('cuantitativo') || normalized.includes('matematica')) {
+    return {
+      icon: Calculator,
+      gradient: 'from-usco-gris to-[#3e4f58]',
+      cardBorder: 'border-usco-ocre/80',
+      bgSoft: 'bg-usco-gris/10',
+      text: 'text-usco-gris',
+      button: 'bg-usco-gris hover:bg-[#3e4f58]',
+    }
+  }
+
+  if (normalized.includes('ciudadana')) {
+    return {
+      icon: Users2,
+      gradient: 'from-usco-ocre to-[#c8ba80]',
+      cardBorder: 'border-usco-ocre/80',
+      bgSoft: 'bg-usco-ocre/35',
+      text: 'text-usco-gris',
+      button: 'bg-usco-vino hover:bg-[#741017]',
+    }
+  }
+
+  if (normalized.includes('comunicacion') || normalized.includes('escrita')) {
+    return {
+      icon: MessageSquare,
+      gradient: 'from-usco-vino to-usco-gris',
+      cardBorder: 'border-usco-ocre/80',
+      bgSoft: 'bg-usco-vino/10',
+      text: 'text-usco-vino',
+      button: 'bg-usco-vino hover:bg-[#741017]',
+    }
+  }
+
+  if (normalized.includes('ingles')) {
+    return {
+      icon: Globe,
+      gradient: 'from-usco-gris to-usco-vino',
+      cardBorder: 'border-usco-ocre/80',
+      bgSoft: 'bg-usco-gris/10',
+      text: 'text-usco-gris',
+      button: 'bg-usco-gris hover:bg-[#3e4f58]',
+    }
+  }
+
+  return {
+    icon: FileQuestion,
+    gradient: 'from-usco-vino to-[#741017]',
+    cardBorder: 'border-usco-ocre/80',
+    bgSoft: 'bg-usco-fondo',
+    text: 'text-usco-vino',
+    button: 'bg-usco-vino hover:bg-[#741017]',
+  }
+}
+
+const sortModuleEntries = (
+  entries: Array<[string, ModuloGroup]>,
+  sortBy: 'nombre' | 'total_desc' | 'total_asc',
+): Array<[string, ModuloGroup]> => {
+  const sorted = [...entries]
+
+  if (sortBy === 'total_desc') {
+    sorted.sort((a, b) => b[1].stats.total - a[1].stats.total)
+    return sorted
+  }
+
+  if (sortBy === 'total_asc') {
+    sorted.sort((a, b) => a[1].stats.total - b[1].stats.total)
+    return sorted
+  }
+
+  sorted.sort(([a], [b]) => a.localeCompare(b))
+  return sorted
+}
+
 const BancoPreguntasPage = () => {
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedModulo, setSelectedModulo] = useState('')
+  const [sortBy, setSortBy] = useState<'nombre' | 'total_desc' | 'total_asc'>('nombre')
   const [successMessage, setSuccessMessage] = useState('')
+
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -67,19 +194,29 @@ const BancoPreguntasPage = () => {
 
   const preguntas = data ?? []
 
-  const preguntasAgrupadas = useMemo<Record<string, ModuloGroup>>(() => {
+  const moduloOptions = useMemo(() => {
+    const names = Array.from(new Set(preguntas.map((pregunta) => getModuloNombre(pregunta))))
+    return names.sort((a, b) => a.localeCompare(b))
+  }, [preguntas])
+
+  const preguntasFiltradas = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
 
-    const filtradas =
-      term.length > 0
-        ? preguntas.filter((pregunta) =>
-            String(pregunta?.enunciado ?? '')
-              .toLowerCase()
-              .includes(term),
-          )
-        : preguntas
+    return preguntas.filter((pregunta) => {
+      const moduloName = getModuloNombre(pregunta)
+      const matchModulo = selectedModulo ? moduloName === selectedModulo : true
+      const matchSearch =
+        term.length === 0 ||
+        String(pregunta.enunciado ?? '')
+          .toLowerCase()
+          .includes(term)
 
-    return filtradas.reduce<Record<string, ModuloGroup>>((acc, pregunta) => {
+      return matchModulo && matchSearch
+    })
+  }, [preguntas, searchTerm, selectedModulo])
+
+  const preguntasAgrupadas = useMemo<Record<string, ModuloGroup>>(() => {
+    return preguntasFiltradas.reduce<Record<string, ModuloGroup>>((acc, pregunta) => {
       const nombreModulo = getModuloNombre(pregunta) || 'General'
 
       if (!acc[nombreModulo]) {
@@ -95,12 +232,26 @@ const BancoPreguntasPage = () => {
 
       return acc
     }, {})
-  }, [preguntas, searchTerm])
+  }, [preguntasFiltradas])
 
   const modulosEntries = useMemo(
-    () => Object.entries(preguntasAgrupadas).sort(([a], [b]) => a.localeCompare(b)),
-    [preguntasAgrupadas],
+    () => sortModuleEntries(Object.entries(preguntasAgrupadas), sortBy),
+    [preguntasAgrupadas, sortBy],
   )
+
+  const resumenGlobal = useMemo(() => {
+    const base = { total: 0, facil: 0, media: 0, alta: 0 }
+
+    return preguntas.reduce((acc, pregunta) => {
+      acc.total += 1
+      acc[getDificultadKey(pregunta.dificultad)] += 1
+      return acc
+    }, base)
+  }, [preguntas])
+
+  const preguntasRecientes = useMemo(() => {
+    return [...preguntasFiltradas].slice(-5).reverse()
+  }, [preguntasFiltradas])
 
   useEffect(() => {
     const state = location.state as { successMessage?: string } | null
@@ -139,77 +290,221 @@ const BancoPreguntasPage = () => {
   }
 
   return (
-    <section className="mx-auto w-full max-w-7xl space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-3xl font-bold text-usco-vino">Banco de Preguntas</h1>
+    <section className="mx-auto w-full max-w-7xl space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-usco-vino">Banco de Preguntas</h1>
+          <p className="mt-1 text-sm text-usco-gris">Gestion modular de preguntas para el ecosistema Saber Pro.</p>
+        </div>
+
         <button
           type="button"
           onClick={() => navigate('/preguntas/nueva')}
-          className="inline-flex items-center justify-center rounded-xl bg-usco-vino px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#741017]"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-usco-vino px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#741017]"
         >
-          + Nueva Pregunta
+          <Plus className="h-4 w-4" />
+          Nueva Pregunta
         </button>
       </header>
 
       {successMessage && (
-        <section className="rounded-xl border border-green-300 bg-green-50 p-4 text-sm text-green-800 shadow-sm">
+        <section className="rounded-xl border border-usco-ocre/90 bg-usco-fondo p-4 text-sm text-usco-vino shadow-sm">
           {successMessage}
         </section>
       )}
 
-      <div className="rounded-2xl border border-usco-ocre/80 bg-white p-4 shadow-sm">
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(event) => setSearchTerm(event.target.value)}
-          placeholder="Buscar por enunciado..."
-          className="w-full rounded-xl border border-usco-ocre/80 px-4 py-2.5 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
-        />
-      </div>
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article className="rounded-2xl border border-usco-ocre/70 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.14em] text-usco-gris/80">Total Preguntas</p>
+          <p className="mt-2 text-3xl font-bold text-usco-vino">{resumenGlobal.total}</p>
+        </article>
+        <article className="rounded-2xl border border-usco-ocre/80 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.14em] text-usco-gris/80">Faciles</p>
+          <p className="mt-2 text-3xl font-bold text-usco-gris">{resumenGlobal.facil}</p>
+        </article>
+        <article className="rounded-2xl border border-usco-ocre/80 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.14em] text-usco-gris/80">Medias</p>
+          <p className="mt-2 text-3xl font-bold text-usco-gris">{resumenGlobal.media}</p>
+        </article>
+        <article className="rounded-2xl border border-usco-ocre/80 bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.14em] text-usco-gris/80">Altas</p>
+          <p className="mt-2 text-3xl font-bold text-usco-gris">{resumenGlobal.alta}</p>
+        </article>
+      </section>
 
-      {modulosEntries.length === 0 && (
+      <section className="rounded-2xl border border-usco-ocre/80 bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_auto]">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Buscar por enunciado..."
+              className="h-11 w-full rounded-xl border border-usco-ocre/80 pl-9 pr-4 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
+            />
+          </label>
+
+          <label className="inline-flex items-center gap-2 rounded-xl border border-usco-ocre/80 bg-white px-3 text-sm text-usco-gris">
+            <Filter className="h-4 w-4" />
+            <select
+              value={selectedModulo}
+              onChange={(event) => setSelectedModulo(event.target.value)}
+              className="h-11 bg-transparent outline-none"
+            >
+              <option value="">Todos los modulos</option>
+              {moduloOptions.map((modulo) => (
+                <option key={modulo} value={modulo}>
+                  {modulo}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="inline-flex items-center gap-2 rounded-xl border border-usco-ocre/80 bg-white px-3 text-sm text-usco-gris">
+            <SortAsc className="h-4 w-4" />
+            <select
+              value={sortBy}
+              onChange={(event) =>
+                setSortBy(event.target.value as 'nombre' | 'total_desc' | 'total_asc')
+              }
+              className="h-11 bg-transparent outline-none"
+            >
+              <option value="nombre">Orden: Modulo A-Z</option>
+              <option value="total_desc">Orden: Mas preguntas</option>
+              <option value="total_asc">Orden: Menos preguntas</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      {modulosEntries.length === 0 ? (
         <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-sm text-usco-gris shadow-sm">
           {preguntas.length === 0
             ? 'No hay preguntas registradas en este momento.'
             : 'No hay preguntas que coincidan con el criterio de busqueda.'}
         </section>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {modulosEntries.map(([modulo, data]) => {
+            const theme = getModuloTheme(modulo)
+            const Icon = theme.icon
+
+            const total = data.stats.total || 1
+            const easyPct = (data.stats.facil / total) * 100
+            const mediumPct = (data.stats.media / total) * 100
+            const hardPct = (data.stats.alta / total) * 100
+
+            return (
+              <article
+                key={modulo}
+                className={`group overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${theme.cardBorder}`}
+              >
+                <div className={`h-1.5 bg-gradient-to-r ${theme.gradient}`} />
+
+                <div className="p-5">
+                  <div className="mb-4 flex items-start justify-between">
+                    <div className={`rounded-xl p-3 ${theme.bgSoft}`}>
+                      <Icon className={`h-6 w-6 ${theme.text}`} />
+                    </div>
+                    <span className="rounded-lg border border-usco-ocre/80 bg-usco-fondo px-2 py-1 text-xs font-medium text-usco-gris">
+                      {data.stats.total} preguntas
+                    </span>
+                  </div>
+
+                  <h2 className={`text-lg font-semibold ${theme.text}`}>{modulo}</h2>
+                  <p className="mt-1 text-sm text-usco-gris">
+                    Distribucion por dificultad para este modulo.
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="rounded-md border border-usco-ocre/80 bg-usco-fondo px-2.5 py-1 text-xs font-semibold text-usco-gris">
+                      Facil: {data.stats.facil}
+                    </span>
+                    <span className="rounded-md border border-usco-ocre/80 bg-usco-ocre/20 px-2.5 py-1 text-xs font-semibold text-usco-gris">
+                      Media: {data.stats.media}
+                    </span>
+                    <span className="rounded-md border border-usco-vino/25 bg-usco-vino/10 px-2.5 py-1 text-xs font-semibold text-usco-vino">
+                      Alta: {data.stats.alta}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-usco-fondo">
+                    <div className="flex h-full w-full">
+                      <span className="h-full bg-usco-gris" style={{ width: `${easyPct}%` }} />
+                      <span className="h-full bg-usco-ocre" style={{ width: `${mediumPct}%` }} />
+                      <span className="h-full bg-usco-vino" style={{ width: `${hardPct}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-xs text-usco-gris/75">Modulo activo en banco</span>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/preguntas/modulo/${encodeURIComponent(modulo)}`)}
+                      className={`rounded-lg px-3.5 py-2 text-sm font-semibold text-white transition ${theme.button}`}
+                    >
+                      Ver Preguntas
+                    </button>
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
       )}
 
-      {modulosEntries.length > 0 && (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {modulosEntries.map(([modulo, data]) => (
-            <article
-              key={modulo}
-              className="flex flex-col justify-between rounded-lg border-t-4 border-usco-vino bg-white p-5 shadow-md"
-            >
-              <div>
-                <h2 className="mb-2 text-xl font-bold text-usco-vino">{modulo}</h2>
-                <p className="text-sm text-usco-gris">
-                  Total de preguntas: <span className="font-bold">{data.stats.total}</span>
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <span className="rounded bg-green-100 px-2 py-1 text-xs text-green-800">
-                    Facil: {data.stats.facil}
-                  </span>
-                  <span className="rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-800">
-                    Media: {data.stats.media}
-                  </span>
-                  <span className="rounded bg-red-100 px-2 py-1 text-xs text-red-800">
-                    Alta: {data.stats.alta}
-                  </span>
-                </div>
-              </div>
+      {preguntasRecientes.length > 0 && (
+        <section className="overflow-hidden rounded-2xl border border-usco-ocre/80 bg-white shadow-sm">
+          <header className="border-b border-usco-ocre/60 px-4 py-3">
+            <h3 className="text-base font-semibold text-usco-vino">Preguntas Recientes</h3>
+            <p className="text-sm text-usco-gris">Ultimas preguntas segun el filtro aplicado.</p>
+          </header>
 
-              <button
-                type="button"
-                onClick={() => navigate(`/preguntas/modulo/${encodeURIComponent(modulo)}`)}
-                className="mt-4 w-full rounded bg-usco-vino py-2 text-white transition-colors hover:bg-red-900"
-              >
-                Ver Preguntas
-              </button>
-            </article>
-          ))}
-        </div>
+          <div className="divide-y divide-usco-ocre/50">
+            {preguntasRecientes.map((pregunta) => {
+              const modulo = getModuloNombre(pregunta)
+              const dificultad = getDificultadLabel(pregunta.dificultad)
+
+              return (
+                <article key={String(pregunta.id)} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-usco-gris" title={pregunta.enunciado}>
+                      {pregunta.enunciado}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-usco-gris/80">{modulo}</span>
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
+                          dificultad === 'Facil'
+                            ? 'bg-usco-fondo text-usco-gris'
+                            : dificultad === 'Media'
+                              ? 'bg-usco-ocre/25 text-usco-gris'
+                              : 'bg-usco-vino/10 text-usco-vino'
+                        }`}
+                      >
+                        {dificultad}
+                      </span>
+                      {pregunta.estado && (
+                        <span className="rounded-md bg-usco-fondo px-2 py-0.5 text-xs font-semibold text-usco-gris">
+                          {pregunta.estado}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/preguntas/modulo/${encodeURIComponent(modulo)}`)}
+                    className="inline-flex items-center justify-center rounded-lg border border-usco-vino px-3 py-1.5 text-xs font-semibold text-usco-vino transition hover:bg-usco-vino/10"
+                  >
+                    Abrir modulo
+                  </button>
+                </article>
+              )
+            })}
+          </div>
+        </section>
       )}
     </section>
   )

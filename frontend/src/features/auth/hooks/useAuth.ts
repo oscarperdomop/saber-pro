@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import authService from '../services/authService'
 import type { LoginCredentials, LoginResponse, User } from '../../../types/auth'
+import { resolveDefaultRoute } from '../../../hooks/useAuthStore'
 
 interface LoginErrorResponse {
   detail?: string
@@ -14,8 +15,10 @@ export const useAuth = () => {
   return useMutation<LoginResponse, AxiosError<LoginErrorResponse>, LoginCredentials>({
     mutationFn: authService.login,
     onSuccess: (data) => {
+      const role = data.rol === 'ADMIN' || data.is_staff ? 'ADMIN' : 'ESTUDIANTE'
       const userData: User = {
         id: data.id,
+        rol: role,
         correo_institucional: data.correo_institucional,
         nombres: data.nombres,
         apellidos: data.apellidos,
@@ -32,7 +35,7 @@ export const useAuth = () => {
         return
       }
 
-      navigate('/dashboard')
+      navigate(resolveDefaultRoute(role))
     },
   })
 }

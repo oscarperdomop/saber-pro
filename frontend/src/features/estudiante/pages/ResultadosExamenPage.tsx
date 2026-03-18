@@ -1,11 +1,17 @@
+import { useEffect, useState } from 'react'
 import type { AxiosError } from 'axios'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Sparkles } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 import { useParams } from 'react-router-dom'
-import evaluacionesService from '../services/evaluacionesService'
+import SaberProLoader from '../../../components/ui/SaberProLoader'
+import estudianteService from '../services/estudianteService'
 import type { PuntajeModuloResultado, ResumenResultados } from '../../../types/evaluaciones'
 
 interface ApiErrorResponse {
   detail?: string
+  detalle?: string
+  error?: string
 }
 
 const clampPercentil = (value: number): number => {
@@ -74,6 +80,7 @@ const PercentileScale = ({
 
 const ResultadosExamenPage = () => {
   const { intentoId } = useParams<{ intentoId: string }>()
+  const [planIA, setPlanIA] = useState('')
 
   const {
     data,
@@ -82,8 +89,25 @@ const ResultadosExamenPage = () => {
     error,
   } = useQuery<ResumenResultados, AxiosError<ApiErrorResponse>>({
     queryKey: ['resumenResultados', intentoId],
-    queryFn: () => evaluacionesService.getResumenResultados(intentoId as string),
+    queryFn: () => estudianteService.getResumenResultados(intentoId as string),
     enabled: Boolean(intentoId),
+  })
+
+  useEffect(() => {
+    if (data?.plan_estudio_ia) {
+      setPlanIA(data.plan_estudio_ia)
+    }
+  }, [data?.plan_estudio_ia])
+
+  const generarPlanMutation = useMutation<
+    { plan: string },
+    AxiosError<ApiErrorResponse>,
+    string
+  >({
+    mutationFn: estudianteService.generarPlanEstudioIA,
+    onSuccess: (response) => {
+      setPlanIA(response.plan)
+    },
   })
 
   if (!intentoId) {
@@ -96,8 +120,8 @@ const ResultadosExamenPage = () => {
 
   if (isLoading) {
     return (
-      <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-usco-gris shadow-sm">
-        Cargando resultados...
+      <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 shadow-sm">
+        <SaberProLoader mensaje="Cargando resultados..." />
       </section>
     )
   }
@@ -237,6 +261,46 @@ const ResultadosExamenPage = () => {
             </svg>
             <span>Percentil del grupo</span>
           </div>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-usco-vino to-red-800 p-4">
+          <h3 className="flex items-center gap-2 text-lg font-bold text-white">
+            <Sparkles className="h-5 w-5" />
+            Tutor Virtual IA: Tu Plan de Mejora
+          </h3>
+          {!planIA && (
+            <button
+              type="button"
+              onClick={() => intentoId && generarPlanMutation.mutate(intentoId)}
+              disabled={generarPlanMutation.isPending || !intentoId}
+              className="rounded bg-white px-4 py-2 font-semibold text-usco-vino transition hover:bg-red-50 disabled:opacity-50"
+            >
+              {generarPlanMutation.isPending ? 'Analizando respuestas...' : 'Generar mi Plan'}
+            </button>
+          )}
+        </div>
+
+        <div className="p-6">
+          {planIA ? (
+            <article className="prose prose-sm max-w-none prose-headings:text-usco-vino prose-strong:text-usco-gris prose-p:text-usco-gris prose-li:text-usco-gris">
+              <ReactMarkdown>{planIA}</ReactMarkdown>
+            </article>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              Haz clic en el boton de arriba para que la Inteligencia Artificial analice tus
+              errores y te cree una ruta de estudio personalizada.
+            </div>
+          )}
+
+          {generarPlanMutation.isError && (
+            <p className="mt-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+              {generarPlanMutation.error.response?.data?.detail ??
+                generarPlanMutation.error.response?.data?.detalle ??
+                'No fue posible generar el plan de estudio con IA en este momento.'}
+            </p>
+          )}
         </div>
       </section>
     </section>

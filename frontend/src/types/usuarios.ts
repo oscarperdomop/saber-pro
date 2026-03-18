@@ -1,5 +1,6 @@
 export interface Usuario {
   id: string | number
+  rol: 'ADMIN' | 'ESTUDIANTE'
   nombres: string
   apellidos: string
   correo_institucional: string

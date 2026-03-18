@@ -19,7 +19,7 @@ const forceLogout = () => {
   localStorage.removeItem('token')
   localStorage.removeItem('refresh_token')
   localStorage.removeItem('user')
-  window.location.replace('/')
+  window.location.replace('/login')
 }
 
 const axiosInstance = axios.create({

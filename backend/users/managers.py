@@ -7,12 +7,14 @@ class CustomUserManager(BaseUserManager):
             raise ValueError('El correo institucional es obligatorio.')
 
         correo_institucional = self.normalize_email(correo_institucional)
+        extra_fields.setdefault('rol', 'ESTUDIANTE')
         user = self.model(correo_institucional=correo_institucional, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
     def create_superuser(self, correo_institucional, password=None, **extra_fields):
+        extra_fields.setdefault('rol', 'ADMIN')
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
