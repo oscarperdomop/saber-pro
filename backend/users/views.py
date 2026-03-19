@@ -4,6 +4,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -13,10 +14,13 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import ProgramaAcademico, Usuario
 from .serializers import (
+    ActualizarMiPasswordSerializer,
     CambiarPasswordSerializer,
     CustomTokenObtainPairSerializer,
+    MiPerfilSerializer,
     ProgramaAcademicoSerializer,
     UsuarioListadoSerializer,
+    validate_new_password_rules,
 )
 
 
@@ -196,6 +200,66 @@ class UsuariosListView(APIView):
 
         return paginator.get_paginated_response(serializer.data)
 
+    def post(self, request):
+        payload = request.data
+
+        nombres = str(payload.get('nombres') or '').strip().upper()
+        apellidos = str(payload.get('apellidos') or '').strip().upper()
+        correo_institucional = str(payload.get('correo_institucional') or '').strip().lower()
+        tipo_documento = str(payload.get('tipo_documento') or '').strip().upper()
+        numero_documento = str(
+            payload.get('numero_documento', payload.get('documento')) or '',
+        ).strip().upper()
+        rol = str(payload.get('rol') or Usuario.ROL_ESTUDIANTE).strip().upper()
+        password = str(payload.get('password') or '').strip() or numero_documento
+
+        if rol not in {Usuario.ROL_ADMIN, Usuario.ROL_ESTUDIANTE}:
+            return Response(
+                {'rol': [f"Rol invalido. Usa {Usuario.ROL_ADMIN} o {Usuario.ROL_ESTUDIANTE}."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not all(
+            [
+                nombres,
+                apellidos,
+                correo_institucional,
+                tipo_documento,
+                numero_documento,
+            ],
+        ):
+            return Response(
+                {
+                    'detalle': (
+                        'Los campos nombres, apellidos, correo_institucional, '
+                        'tipo_documento y numero_documento son obligatorios.'
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        usuario = Usuario(
+            nombres=nombres,
+            apellidos=apellidos,
+            correo_institucional=correo_institucional,
+            tipo_documento=tipo_documento,
+            documento=numero_documento,
+            rol=rol,
+            es_primer_ingreso=True,
+            is_active=True,
+        )
+
+        try:
+            usuario.full_clean()
+        except ValidationError as exc:
+            return Response(exc.message_dict, status=status.HTTP_400_BAD_REQUEST)
+
+        usuario.set_password(password)
+        usuario.save()
+
+        serializer = UsuarioListadoSerializer(usuario)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 
 class ProgramasListView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -204,6 +268,24 @@ class ProgramasListView(APIView):
         programas = ProgramaAcademico.objects.all().order_by('nombre')
         serializer = ProgramaAcademicoSerializer(programas, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class MiPerfilView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = MiPerfilSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        serializer = ActualizarMiPasswordSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+
+        password_nueva = serializer.validated_data['password_nueva']
+        request.user.set_password(password_nueva)
+        request.user.save(update_fields=['password'])
+
+        return Response({'mensaje': 'Contrasena actualizada con exito.'}, status=status.HTTP_200_OK)
 
 
 class UsuariosEstadoUpdateView(APIView):
@@ -233,11 +315,18 @@ class UsuariosEstadoUpdateView(APIView):
             'tipo_documento',
             'numero_documento',
             'documento',
+            'rol',
         }
+        password_nueva = str(payload.get('password') or '').strip()
         requiere_actualizacion_estado = 'is_active' in payload
         requiere_actualizacion_perfil = any(campo in payload for campo in campos_perfil)
+        requiere_actualizacion_password = bool(password_nueva)
 
-        if not requiere_actualizacion_estado and not requiere_actualizacion_perfil:
+        if (
+            not requiere_actualizacion_estado
+            and not requiere_actualizacion_perfil
+            and not requiere_actualizacion_password
+        ):
             return Response(
                 {'detalle': 'No se enviaron campos validos para actualizar.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -276,6 +365,38 @@ class UsuariosEstadoUpdateView(APIView):
                 documento = payload.get('numero_documento', payload.get('documento'))
                 usuario.documento = str(documento or '').strip().upper()
                 update_fields.append('documento')
+
+            if 'rol' in payload:
+                rol = str(payload.get('rol') or '').strip().upper()
+                if rol not in {Usuario.ROL_ADMIN, Usuario.ROL_ESTUDIANTE}:
+                    return Response(
+                        {
+                            'rol': [
+                                f"Rol invalido. Usa {Usuario.ROL_ADMIN} o {Usuario.ROL_ESTUDIANTE}.",
+                            ],
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                usuario.rol = rol
+                update_fields.append('rol')
+
+        if requiere_actualizacion_password:
+            try:
+                validate_new_password_rules(usuario, password_nueva)
+            except (ValidationError, DRFValidationError) as exc:
+                mensajes = []
+                if hasattr(exc, 'message_dict'):
+                    for values in exc.message_dict.values():
+                        mensajes.extend(values)
+                if hasattr(exc, 'messages'):
+                    mensajes.extend(exc.messages)
+                if not mensajes:
+                    mensajes.append(str(exc))
+
+                return Response({'password': mensajes}, status=status.HTTP_400_BAD_REQUEST)
+
+            usuario.set_password(password_nueva)
+            update_fields.append('password')
 
         try:
             usuario.full_clean()

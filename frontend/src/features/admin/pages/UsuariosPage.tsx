@@ -4,7 +4,9 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Ban, Check, Edit, Trash2 } from 'lucide-react'
 import usuariosService from '../services/usuariosService'
 import CargaMasivaModal from '../components/CargaMasivaModal'
+import CrearUsuarioModal from '../components/CrearUsuarioModal'
 import EditarUsuarioModal from '../components/EditarUsuarioModal'
+import SaberProLoader from '../../../components/ui/SaberProLoader'
 import type { Usuario, UsuariosPaginadosResponse } from '../../../types/usuarios'
 
 interface ApiErrorResponse {
@@ -18,6 +20,7 @@ const UsuariosPage = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isCrearModalOpen, setIsCrearModalOpen] = useState(false)
   const [usuarioEditando, setUsuarioEditando] = useState<Usuario | null>(null)
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(
     null,
@@ -75,8 +78,8 @@ const UsuariosPage = () => {
 
   if (isLoading && !data) {
     return (
-      <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-usco-gris shadow-sm">
-        Cargando usuarios...
+      <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 shadow-sm">
+        <SaberProLoader mensaje="Cargando usuarios..." />
       </section>
     )
   }
@@ -103,6 +106,7 @@ const UsuariosPage = () => {
           </button>
           <button
             type="button"
+            onClick={() => setIsCrearModalOpen(true)}
             className="inline-flex items-center justify-center rounded-xl bg-usco-vino px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#741017]"
           >
             + Nuevo Usuario
@@ -178,7 +182,7 @@ const UsuariosPage = () => {
                   {usuario.tipo_documento} {usuario.numero_documento}
                 </td>
                 <td className="px-4 py-3 text-center">
-                  {usuario.is_staff ? (
+                  {usuario.rol === 'ADMIN' ? (
                     <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-bold text-purple-800">
                       Administrador
                     </span>
@@ -279,6 +283,11 @@ const UsuariosPage = () => {
       )}
 
       <CargaMasivaModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <CrearUsuarioModal
+        isOpen={isCrearModalOpen}
+        onClose={() => setIsCrearModalOpen(false)}
+        onNotify={setNotification}
+      />
       <EditarUsuarioModal
         isOpen={usuarioEditando !== null}
         onClose={() => setUsuarioEditando(null)}

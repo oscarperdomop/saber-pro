@@ -14,6 +14,16 @@ export const getUsuarios = async (
   return data
 }
 
+export const crearUsuario = async (
+  data: Pick<
+    Usuario,
+    'nombres' | 'apellidos' | 'correo_institucional' | 'tipo_documento' | 'numero_documento' | 'rol'
+  > & { password?: string },
+): Promise<Usuario> => {
+  const response = await axiosInstance.post<Usuario>('/auth/usuarios/', data)
+  return response.data
+}
+
 type ProgramasRawResponse = Programa[] | { results?: Programa[] }
 
 export const getProgramas = async (): Promise<Programa[]> => {
@@ -51,7 +61,7 @@ export const editarUsuario = async ({
   data,
 }: {
   id: string | number
-  data: Partial<Usuario>
+  data: Partial<Usuario> & { password?: string; documento?: string }
 }) => {
   const response = await axiosInstance.patch(`/usuarios/${id}/`, data)
   return response.data
@@ -63,6 +73,7 @@ const usuariosService = {
   toggleEstadoUsuario,
   subirExcelUsuarios,
   editarUsuario,
+  crearUsuario,
 }
 
 export default usuariosService

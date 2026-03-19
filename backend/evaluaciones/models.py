@@ -137,6 +137,11 @@ class IntentoExamen(models.Model):
     fecha_inicio = models.DateTimeField(auto_now_add=True)
     fecha_finalizacion = models.DateTimeField(null=True, blank=True)
     estado = models.CharField(max_length=30, default='En Progreso', choices=ESTADO_CHOICES)
+    plan_estudio_ia = models.TextField(
+        null=True,
+        blank=True,
+        help_text='Plan de estudio generado por IA en formato Markdown',
+    )
 
     def __str__(self):
         return f'Intento {self.id}'

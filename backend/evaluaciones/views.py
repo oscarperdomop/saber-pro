@@ -691,7 +691,7 @@ class EstudianteExamenViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         programa_id = getattr(self.request.user, 'programa_id', None)
         now = timezone.now()
-        queryset = PlantillaExamen.objects.filter(
+        queryset = PlantillaExamen.objects.prefetch_related('reglas').filter(
             estado='Activo',
             fecha_inicio__lte=now,
             fecha_fin__gte=now,
@@ -771,7 +771,31 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = IntentoExamenSerializer
 
     def get_queryset(self):
-        return IntentoExamen.objects.filter(estudiante=self.request.user)
+        return (
+            IntentoExamen.objects.filter(estudiante=self.request.user)
+            .select_related('plantilla_examen')
+            .prefetch_related('respuestas__opcion_seleccionada', 'respuestas__pregunta')
+        )
+
+    @staticmethod
+    def _calcular_puntaje_saber_pro(intento):
+        respuestas = list(intento.respuestas.all())
+        total_preguntas = len(respuestas)
+        if total_preguntas == 0:
+            return 0
+
+        aciertos_multiples = 0
+        puntaje_ensayos = Decimal('0')
+
+        for respuesta in respuestas:
+            if respuesta.opcion_seleccionada_id and respuesta.opcion_seleccionada.es_correcta:
+                aciertos_multiples += 1
+
+            if respuesta.pregunta.limite_palabras is not None and respuesta.puntaje_calificado is not None:
+                puntaje_ensayos += respuesta.puntaje_calificado
+
+        total_aciertos = Decimal(aciertos_multiples) + puntaje_ensayos
+        return round((float(total_aciertos) / total_preguntas) * 300)
 
     @action(detail=True, methods=['get'])
     def cargar_respuestas(self, request, pk=None):
@@ -800,6 +824,114 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
             intento.save()
 
         return Response({'estado': intento.estado})
+
+    @action(detail=True, methods=['post'])
+    def generar_plan_estudio(self, request, pk=None):
+        intento = self.get_object()
+
+        if intento.plan_estudio_ia:
+            return Response({'plan': intento.plan_estudio_ia}, status=status.HTTP_200_OK)
+
+        respuestas = intento.respuestas.select_related(
+            'pregunta__modulo',
+            'pregunta__competencia',
+            'pregunta__categoria',
+            'opcion_seleccionada',
+        )
+
+        respuestas_malas = []
+        for respuesta in respuestas:
+            pregunta = respuesta.pregunta
+
+            if pregunta.limite_palabras is None:
+                # Opcion multiple: sin seleccionar o seleccion incorrecta cuenta como falla.
+                if not respuesta.opcion_seleccionada_id or not respuesta.opcion_seleccionada.es_correcta:
+                    respuestas_malas.append(respuesta)
+                continue
+
+            # Ensayo: solo se considera falla si ya fue calificado en 0 o menos.
+            if respuesta.puntaje_calificado is not None and float(respuesta.puntaje_calificado) <= 0:
+                respuestas_malas.append(respuesta)
+
+        if len(respuestas_malas) == 0:
+            mensaje = (
+                '## Excelente resultado\n\n'
+                'Felicidades, no se identificaron respuestas incorrectas en este intento. '
+                'Sigue practicando para mantener ese nivel.'
+            )
+            intento.plan_estudio_ia = mensaje
+            intento.save(update_fields=['plan_estudio_ia'])
+            return Response({'plan': mensaje}, status=status.HTTP_200_OK)
+
+        debilidades = {}
+        for respuesta in respuestas_malas:
+            modulo_nombre = respuesta.pregunta.modulo.nombre
+            competencia_nombre = (
+                respuesta.pregunta.competencia.nombre
+                if respuesta.pregunta.competencia_id
+                else 'General'
+            )
+            debilidades.setdefault(modulo_nombre, set()).add(competencia_nombre)
+
+        resumen_fallos = '\n'.join(
+            [
+                f"- Modulo {modulo}: Fallo en competencias como {', '.join(sorted(competencias))}"
+                for modulo, competencias in debilidades.items()
+            ]
+        )
+
+        puntaje_global = self._calcular_puntaje_saber_pro(intento)
+
+        prompt = f"""
+      Eres un tutor experto en pruebas ICFES Saber Pro. Un estudiante ha fallado preguntas en tu área.
+
+      Puntaje obtenido: {puntaje_global}
+      Áreas de fallo exactas: {resumen_fallos}
+
+      Tu objetivo no es darle consejos generales ni motivación vacía. Tu objetivo es ENSEÑARLE a resolver sus errores AHORA MISMO.
+      Crea una micro-lección de tutoría en formato Markdown estructurada estrictamente de la siguiente manera:
+
+      ### 💡 ¿Por qué es importante esto?
+      (Explica en un párrafo corto y directo, sin rodeos, qué significa esta competencia en la vida real o en la prueba).
+
+      ### 🔍 Concepto Clave (Repaso Rápido)
+      (Explica el concepto matemático, de lectura o lógica que el estudiante necesita saber para no volver a fallar. Usa ejemplos cortos. Si falló en gráficas, explícale cómo leer los ejes X y Y).
+
+      ### 🏋️‍♂️ Gimnasio Mental: Ejercicios Prácticos
+      (Crea 3 ejercicios de práctica RÁPIDOS y directos basados en las competencias donde falló. Plantea el problema y haz la pregunta).
+      * **Ejercicio 1:** [Planteamiento del problema de nivel básico]
+      * **Ejercicio 2:** [Planteamiento del problema de nivel medio]
+      * **Ejercicio 3:** [Planteamiento del problema de nivel alto]
+
+      ### ✅ Respuestas Explicadas
+      (Proporciona la solución paso a paso de los 3 ejercicios anteriores para que el estudiante pueda autoevaluarse inmediatamente).
+
+      No incluyas cronogramas de días, no lo mandes a buscar en otras páginas, no uses frases cliché extensas. Sé un profesor al grano, práctico y enfocado en la resolución de problemas.
+      """
+
+        try:
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            modelo_nombre, _ = GenerarOpcionesIAView._resolver_modelo_gemini()
+            model = genai.GenerativeModel(modelo_nombre)
+            response = model.generate_content(prompt)
+            plan_generado = str(getattr(response, 'text', '') or '').strip()
+
+            if not plan_generado:
+                raise ValueError('La IA no devolvio contenido para el plan.')
+
+            intento.plan_estudio_ia = plan_generado
+            intento.save(update_fields=['plan_estudio_ia'])
+
+            return Response({'plan': plan_generado}, status=status.HTTP_200_OK)
+
+        except Exception as exc:
+            return Response(
+                {
+                    'detalle': 'No fue posible generar el plan de estudio en este momento.',
+                    'error': str(exc),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @action(detail=True, methods=['get'])
     def resumen_resultados(self, request, pk=None):
@@ -837,6 +969,7 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
                     'aciertos_brutos': 0,
                     'detalle_respuestas': [],
                     'puntajes_por_modulo': [],
+                    'plan_estudio_ia': intento.plan_estudio_ia,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -883,6 +1016,7 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
                 'aciertos_brutos': float(total_aciertos),
                 'detalle_respuestas': RevisionRespuestaSerializer(respuestas, many=True).data,
                 'puntajes_por_modulo': modulos_data,
+                'plan_estudio_ia': intento.plan_estudio_ia,
             },
             status=status.HTTP_200_OK,
         )

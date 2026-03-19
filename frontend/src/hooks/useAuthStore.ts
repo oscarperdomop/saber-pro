@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import type { User } from '../types/auth'
+import type { User, UserRole } from '../types/auth'
 
 const USER_STORAGE_KEY = 'user'
 const TOKEN_STORAGE_KEY = 'token'
@@ -26,21 +26,35 @@ export const getStoredToken = (): string | null => {
   return localStorage.getItem(TOKEN_STORAGE_KEY)
 }
 
+export const resolveUserRole = (user: User | null): UserRole => {
+  if (user?.rol === 'ADMIN' || user?.rol === 'ESTUDIANTE') {
+    return user.rol
+  }
+  return user?.is_staff ? 'ADMIN' : 'ESTUDIANTE'
+}
+
+export const resolveDefaultRoute = (role: UserRole): string => {
+  return role === 'ADMIN' ? '/dashboard' : '/estudiante/dashboard'
+}
+
 export const useAuthStore = () => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const user = getStoredUser()
+  const role = resolveUserRole(user)
 
   const logout = () => {
     localStorage.removeItem(TOKEN_STORAGE_KEY)
     localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
     localStorage.removeItem(USER_STORAGE_KEY)
     queryClient.clear()
-    navigate('/', { replace: true })
+    navigate('/login', { replace: true })
   }
 
   return {
-    user: getStoredUser(),
+    user,
     token: getStoredToken(),
+    role,
     logout,
     isAuthenticated: Boolean(getStoredToken()),
   }

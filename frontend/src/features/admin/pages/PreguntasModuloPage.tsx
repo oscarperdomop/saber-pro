@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, ArrowLeft, CheckCircle, CircleDashed, Edit, Trash2 } from 'lucide-react'
+import { Archive, ArrowLeft, CheckCircle, CircleDashed, Edit, Eye, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import VisualizarPreguntaModal from '../components/VisualizarPreguntaModal'
 import preguntasService from '../services/preguntasService'
 import type { Modulo, Pregunta } from '../../../types/preguntas'
 
@@ -68,6 +69,7 @@ const PreguntasModuloPage = () => {
   const { moduloNombre } = useParams()
   const moduloActual = safeDecode(moduloNombre ?? 'General')
   const [mostrarArchivadas, setMostrarArchivadas] = useState(false)
+  const [preguntaViendo, setPreguntaViendo] = useState<Pregunta | null>(null)
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(
     null,
   )
@@ -243,9 +245,26 @@ const PreguntasModuloPage = () => {
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-center gap-3 text-usco-gris">
                     {pregunta.estado === 'Archivada' ? (
-                      <span className="text-xs italic text-gray-400">Solo lectura (Historial)</span>
+                      <button
+                        type="button"
+                        onClick={() => setPreguntaViendo(pregunta)}
+                        className="rounded-md p-1.5 text-gray-500 transition hover:bg-usco-fondo hover:text-usco-vino"
+                        title="Ver pregunta archivada"
+                        aria-label="Ver pregunta archivada"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
                     ) : (
                       <>
+                        <button
+                          type="button"
+                          onClick={() => setPreguntaViendo(pregunta)}
+                          className="rounded-md p-1.5 transition hover:bg-usco-fondo hover:text-blue-600"
+                          title="Ver pregunta"
+                          aria-label="Ver pregunta"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => navigate(`/preguntas/${pregunta.id}/editar`)}
@@ -302,6 +321,12 @@ const PreguntasModuloPage = () => {
           No fue posible actualizar el estado de la pregunta.
         </section>
       )}
+
+      <VisualizarPreguntaModal
+        isOpen={Boolean(preguntaViendo)}
+        onClose={() => setPreguntaViendo(null)}
+        pregunta={preguntaViendo}
+      />
     </section>
   )
 }

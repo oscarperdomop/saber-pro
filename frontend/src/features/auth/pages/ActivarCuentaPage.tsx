@@ -3,6 +3,7 @@ import type { AxiosError } from 'axios'
 import { CheckCircle2, KeyRound, ShieldCheck } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { resolveDefaultRoute, resolveUserRole } from '../../../hooks/useAuthStore'
 import authService from '../services/authService'
 import type { ActivarCuentaPayload } from '../services/authService'
 import type { User } from '../../../types/auth'
@@ -78,7 +79,8 @@ const ActivarCuentaPage = () => {
 
         setSuccessMessage('Cuenta activada correctamente. Redirigiendo al dashboard...')
         window.setTimeout(() => {
-          navigate('/dashboard', { replace: true })
+          const nextRole = resolveUserRole(storedUser)
+          navigate(resolveDefaultRoute(nextRole), { replace: true })
         }, 1200)
       },
     },

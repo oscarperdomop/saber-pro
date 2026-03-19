@@ -19,6 +19,8 @@ interface FormValues {
   correo_institucional: string
   tipo_documento: string
   numero_documento: string
+  rol: 'ADMIN' | 'ESTUDIANTE'
+  nueva_password: string
 }
 
 interface ApiErrorResponse {
@@ -33,6 +35,8 @@ const initialFormValues: FormValues = {
   correo_institucional: '',
   tipo_documento: 'CC',
   numero_documento: '',
+  rol: 'ESTUDIANTE',
+  nueva_password: '',
 }
 
 const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuarioModalProps) => {
@@ -52,6 +56,8 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
       correo_institucional: usuario.correo_institucional ?? '',
       tipo_documento: usuario.tipo_documento ?? 'CC',
       numero_documento: usuario.numero_documento ?? '',
+      rol: usuario.rol ?? 'ESTUDIANTE',
+      nueva_password: '',
     })
     setErrorMessage('')
   }, [usuario])
@@ -59,7 +65,7 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
   const editarUsuarioMutation = useMutation<
     unknown,
     AxiosError<ApiErrorResponse>,
-    { id: string | number; data: Partial<Usuario> & { documento: string } }
+    { id: string | number; data: Partial<Usuario> & { documento: string; password?: string } }
   >({
     mutationFn: ({ id, data }) => usuariosService.editarUsuario({ id, data }),
     onSuccess: () => {
@@ -93,6 +99,8 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
       correo_institucional: formValues.correo_institucional.trim().toLowerCase(),
       tipo_documento: formValues.tipo_documento.trim().toUpperCase(),
       numero_documento: formValues.numero_documento.trim().toUpperCase(),
+      rol: formValues.rol,
+      nueva_password: formValues.nueva_password.trim(),
     }
 
     const normalizedOriginal = {
@@ -101,6 +109,7 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
       correo_institucional: (usuario.correo_institucional ?? '').trim().toLowerCase(),
       tipo_documento: (usuario.tipo_documento ?? '').trim().toUpperCase(),
       numero_documento: (usuario.numero_documento ?? '').trim().toUpperCase(),
+      rol: usuario.rol ?? 'ESTUDIANTE',
     }
 
     const hasChanges =
@@ -108,7 +117,9 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
       normalizedCurrent.apellidos !== normalizedOriginal.apellidos ||
       normalizedCurrent.correo_institucional !== normalizedOriginal.correo_institucional ||
       normalizedCurrent.tipo_documento !== normalizedOriginal.tipo_documento ||
-      normalizedCurrent.numero_documento !== normalizedOriginal.numero_documento
+      normalizedCurrent.numero_documento !== normalizedOriginal.numero_documento ||
+      normalizedCurrent.rol !== normalizedOriginal.rol ||
+      normalizedCurrent.nueva_password.length > 0
 
     if (!hasChanges) {
       onNotify({ type: 'info', message: 'Sin cambios por guardar.' })
@@ -116,13 +127,18 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
       return
     }
 
-    const payload: Partial<Usuario> & { documento: string } = {
+    const payload: Partial<Usuario> & { documento: string; password?: string } = {
       nombres: normalizedCurrent.nombres,
       apellidos: normalizedCurrent.apellidos,
       correo_institucional: normalizedCurrent.correo_institucional,
       tipo_documento: normalizedCurrent.tipo_documento,
       numero_documento: normalizedCurrent.numero_documento,
       documento: normalizedCurrent.numero_documento,
+      rol: normalizedCurrent.rol,
+    }
+
+    if (normalizedCurrent.nueva_password.length > 0) {
+      payload.password = normalizedCurrent.nueva_password
     }
 
     editarUsuarioMutation.mutate({ id: usuario.id, data: payload })
@@ -191,6 +207,21 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
             </label>
 
             <label className="col-span-1">
+              <span className="mb-1 block text-sm font-semibold text-usco-gris">Rol del Usuario</span>
+              <select
+                value={formValues.rol}
+                onChange={(event) =>
+                  handleChange('rol', event.target.value as FormValues['rol'])
+                }
+                className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
+                required
+              >
+                <option value="ESTUDIANTE">Estudiante</option>
+                <option value="ADMIN">Administrador</option>
+              </select>
+            </label>
+
+            <label className="col-span-1">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">
                 Numero de Documento
               </span>
@@ -202,6 +233,22 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
                 required
               />
             </label>
+          </div>
+
+          <div className="mt-1 border-t border-usco-ocre/60 pt-4">
+            <label className="block text-sm font-medium text-usco-gris">
+              Restablecer Contrasena (Opcional)
+            </label>
+            <input
+              type="text"
+              value={formValues.nueva_password}
+              placeholder="Dejar en blanco para no cambiar"
+              onChange={(event) => handleChange('nueva_password', event.target.value)}
+              className="mt-1 block w-full rounded-md border border-usco-ocre/80 p-2 text-sm text-usco-gris shadow-sm focus:border-usco-vino focus:ring-usco-vino"
+            />
+            <p className="mt-1 text-xs text-usco-gris/80">
+              Si escribes una clave aqui, reemplazara la actual del estudiante.
+            </p>
           </div>
 
           {errorMessage && (

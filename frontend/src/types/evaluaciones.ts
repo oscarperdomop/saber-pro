@@ -3,6 +3,9 @@ export interface PlantillaExamen {
   titulo: string
   descripcion: string
   tiempo_minutos: number
+  cantidad_preguntas?: number
+  modulos?: string[]
+  dificultad_referencia?: string
   fecha_inicio: string
   fecha_fin: string
   mostrar_resultados_inmediatos: boolean
@@ -65,6 +68,10 @@ export interface IntentoPrevio {
   id: string
   plantilla_examen: string | number | { id: string | number } | null
   estado: string
+  plantilla_titulo?: string
+  fecha_finalizacion?: string | null
+  puntaje_global?: number
+  plan_estudio_ia?: string | null
 }
 
 export interface Opcion {
@@ -105,6 +112,7 @@ export interface ResumenResultados {
   puntaje_saber_pro: number
   total_preguntas: number
   aciertos_brutos: number
+  plan_estudio_ia?: string | null
   detalle_respuestas?: DetalleResultadoRespuesta[]
   puntajes_por_modulo?: PuntajeModuloResultado[]
 }

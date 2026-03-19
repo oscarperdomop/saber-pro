@@ -1,276 +1,201 @@
-# 📚 Aplicativo Pruebas Saber Pro USCO
+# Saber Pro USCO
 
-Plataforma web interactiva para la preparación de estudiantes de la Universidad Surcolombiana de la Licenciatura en Matemática en las pruebas **Saber Pro**. Una solución didáctica y completa que permite a los estudiantes practicar, evaluar sus conocimientos y mejorar sus habilidades académicas.
+Plataforma web para la preparacion de estudiantes de la Universidad Surcolombiana para pruebas tipo Saber Pro.
 
-**Proyecto de Grado** - Universidad Surcolombiana
+Este repositorio contiene:
+- `backend/`: API REST en Django.
+- `frontend/`: aplicacion React + Vite + TypeScript.
+- `scripts/`: utilidades para correr backend/frontend en desarrollo.
+- `tmp/`: prototipos y redisenos (no hacen parte de la app principal).
 
----
+## Estado del proyecto
 
-## 🎯 Objetivo del Proyecto
+- Backend activo con modulos de usuarios y evaluaciones.
+- Frontend activo con flujos para roles `ADMIN` y `ESTUDIANTE`.
+- PWA configurada en frontend.
+- El `README` fue actualizado para reflejar la estructura y comandos reales a fecha `2026-03-19`.
 
-Desarrollar una aplicación web que facilite la preparación de estudiantes de pregrado para las pruebas Saber Pro, proporcionando:
-
-- ✅ **Exámenes simulados** con estructura similar a la prueba oficial
-- ✅ **Retroalimentación inmediata** sobre respuestas y desempeño
-- ✅ **Análisis detallado** de fortalezas y áreas de mejora
-
----
-
-## 🚀 Características Principales
-
-### 📝 Exámenes y Evaluaciones
-
-- **Módulos temáticos** por competencia: Lectura Crítica, Razonamiento Cuantitativo, Inglés, Competencias Ciudadanas
-- **Pruebas completas** que simulan la estructura oficial de Saber Pro
-- **Pruebas parciales** para práctica de temas específicos (V2)
-- **Banco de preguntas** que el administrador podrá crear y administrar
-- **Retroalimentación inmediata** al finalizar cada examen
-- **Modo práctica** y **modo evaluación** para diferentes estilos de aprendizaje (V2)
-
-### 📊 Análisis y Reportes
-
-- **Dashboard personalizado** con resumen de desempeño
-- **Análisis de resultados** por competencia y tema
-- **Identificación de fortalezas y debilidades** académicas
-- **Comparativa de progreso** a lo largo del tiempo (V2)
-- **Exportación de reportes** en PDF y Excel
-
-### 🎓 Herramientas de Aprendizaje
-
-- **Material de estudio** complementario por tema
-- **Explicación detallada** de respuestas correctas e incorrectas
-- **Glosario de términos** importantes
-- **Recursos adicionales** para refuerzo
-
-### 👤 Gestión de Usuarios
-
-- **Autenticación segura** con credenciales institucionales (@usco.edu.co)
-- **Perfiles personalizados** por estudiante
-- **Seguimiento histórico** de evaluaciones (V2)
-
-### ⚙️ Panel Administrativo
-
-- **Gestión de usuarios** y estudiantes
-- **Administración de pruebas** y preguntas
-- **Monitoreo de progreso** grupal e individual (V2)
-- **Reportes institucionales** de desempeño (V2)
-
----
-
-## 💻 Stack Tecnológico
+## Stack tecnologico
 
 ### Backend
-- **Django** (72.3% Python) - Framework web robusto y versátil
-- **Django REST Framework** - API RESTful
-- **JWT** - Autenticación segura basada en tokens
-- **PostgreSQL** - Base de datos relacional
+- Django 5.1.x
+- Django REST Framework
+- JWT (`djangorestframework-simplejwt`)
+- PostgreSQL
+- `django-cors-headers`
+- `python-dotenv`
+- `pandas` + `openpyxl` (carga masiva por Excel)
+- `google-generativeai` (generacion de opciones con IA)
 
 ### Frontend
-- **React 19** (26.7% TypeScript) - Interfaz interactiva
-- **TypeScript** - Tipado estático para mayor robustez
-- **React Router v7** - Navegación en la aplicación
-- **TailwindCSS** - Diseño responsivo y moderno
-- **PWA** - Acceso offline y experiencia de app nativa
+- React 19
+- TypeScript
+- Vite 7
+- React Router 7
+- React Query
+- Axios
+- Tailwind CSS
+- `vite-plugin-pwa`
 
-### Infraestructura
-- **Git/GitHub** - Control de versiones
-- **Vercel** - Despliegue en producción (frontend)
+## Estructura real del repo
 
----
-
-## 📁 Estructura del Proyecto
-
-```
+```text
 saber-pro/
-├── backend/
-│   ├── manage.py                   # Gestor de Django
-│   ├── requirements.txt            # Dependencias Python
-│   ├── config/
-│   │   ├── settings.py             # Configuración de Django
-│   │   ├── urls.py                 # Rutas principales
-│   │   └── wsgi.py                 # WSGI para producción
-│   ├── apps/
-│   │   ├── usuarios/               # App de usuarios
-│   │   ├── examenes/               # App de exámenes
-│   │   ├── preguntas/              # App de preguntas
-│   │   └── reportes/               # App de reportes
-│   └── .env.example                # Variables de entorno
-│
-├── frontend/
-│   ├── src/
-│   │   ├── components/             # Componentes React
-│   │   ├── pages/                  # Páginas de la aplicación
-│   │   ├── services/               # Integración con API
-│   │   ├── hooks/                  # Custom hooks
-│   │   ├── types/                  # Tipos TypeScript
-│   │   └── styles/                 # Estilos TailwindCSS
-│   ├── public/                     # Archivos estáticos
-│   ├── package.json                # Dependencias Node.js
-│   ├── vercel.json                 # Configuración Vercel
-│   └── index.html                  # HTML principal
-│
-└── README.md                       # Este archivo
+|-- backend/
+|   |-- core/
+|   |-- users/
+|   |-- evaluaciones/
+|   |-- media/
+|   `-- manage.py
+|-- frontend/
+|   |-- src/
+|   |   |-- features/
+|   |   |-- components/
+|   |   |-- routes/
+|   |   `-- lib/
+|   |-- public/
+|   `-- package.json
+|-- scripts/
+|-- tmp/
+|-- Makefile
+`-- README.md
 ```
 
----
+## Requisitos
 
-## 🔧 Instalación y Configuración
+- Python 3.10+
+- Node.js 20+
+- PostgreSQL 14+ (recomendado)
+- Bash para usar `make dev` y scripts de `scripts/`
 
-### Requisitos Previos
-- Python 3.8+
-- Node.js 16+
-- Git
+## Variables de entorno
+
+No existen aun archivos `*.env.example`, por eso debes crearlos manualmente.
+
+### Backend (`backend/.env`)
+
+Variables requeridas por `backend/core/settings.py`:
+
+```env
+DB_NAME=saberpro
+DB_USER=postgres
+DB_PASSWORD=tu_password_real
+DB_HOST=localhost
+DB_PORT=5432
+```
+
+Variables opcionales:
+
+```env
+GEMINI_API_KEY=tu_api_key
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+### Frontend (`frontend/.env.local` o `frontend/.env`)
+
+```env
+VITE_API_URL=http://localhost:8000/api/
+```
+
+Si no defines `VITE_API_URL`, el frontend usa por defecto `http://localhost:8000/api/`.
+
+## Instalacion y ejecucion
+
+## 1) Backend
+
+```bash
+cd backend
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -U pip
+pip install django djangorestframework djangorestframework-simplejwt django-cors-headers python-dotenv psycopg2-binary pandas openpyxl google-generativeai Pillow
+python manage.py migrate
+python manage.py runserver 0.0.0.0:8000
+```
+
+## 2) Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev -- --host 0.0.0.0 --port 5173
+```
+
+## 3) Arranque rapido con Make (opcional)
+
+Desde la raiz del repo:
+
+```bash
+make dev
+```
+
+Tambien puedes correr por separado:
+
+```bash
+make dev-backend
+make dev-frontend
+```
+
+Nota: estos comandos usan scripts `bash`.
+
+## URLs locales
+
+- Frontend: `http://localhost:5173`
+- Backend API base: `http://localhost:8000/api/`
+- Admin Django: `http://localhost:8000/admin/`
+
+## Endpoints principales
+
+- Auth y usuario:
+  - `POST /api/auth/login/`
+  - `POST /api/auth/login/refresh/`
+  - `GET /api/auth/perfil/`
+  - `POST /api/auth/carga-masiva/`
+- Evaluaciones:
+  - prefijo base ` /api/evaluaciones/`
+  - rutas de administrador: `/admin/*`
+  - rutas de estudiante: `/estudiante/*`
+  - IA: `POST /api/evaluaciones/ia/generar-opciones/`
+- Admin analiticas:
+  - `GET /api/admin/analiticas/kpis_globales/`
+
+## Comandos utiles
+
+### Frontend (`frontend/package.json`)
+
+- `npm run dev`
+- `npm run build`
+- `npm run lint`
+- `npm run preview`
 
 ### Backend
 
-```bash
-# Clonar repositorio
-git clone https://github.com/oscarperdomop/saber-pro.git
-cd saber-pro/backend
+- `python manage.py migrate`
+- `python manage.py createsuperuser`
+- `python manage.py test`
 
-# Crear entorno virtual
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
+## Pruebas y calidad
 
-# Instalar dependencias
-pip install -r requirements.txt
+- Existen archivos de test en:
+  - `backend/users/tests.py`
+  - `backend/evaluaciones/tests.py`
+- Actualmente son plantillas basicas; falta ampliar cobertura.
+- En frontend no hay script `test` configurado todavia.
 
-# Configurar variables de entorno
-cp .env.example .env
+## Notas importantes
 
-# Ejecutar migraciones
-python manage.py migrate
+- `tmp/` contiene material de rediseno y prototipos; no corresponde al producto en ejecucion.
+- `backend/backend/.venv/` parece ser un entorno legado y no se usa por defecto.
+- Si `DB_PASSWORD` queda en el placeholder (`tu_password`), Django falla intencionalmente al iniciar.
 
-# Crear superusuario
-python manage.py createsuperuser
+## Pendientes recomendados
 
-# Iniciar servidor
-python manage.py runserver
-```
+- Crear `backend/requirements.txt`.
+- Crear `backend/.env.example` y `frontend/.env.example`.
+- Separar documentacion tecnica en `docs/` (arquitectura, API, despliegue, contribucion).
 
-### Frontend
+## Equipo
 
-```bash
-# Navegar al directorio frontend
-cd ../frontend
-
-# Instalar dependencias
-npm install
-
-# Configurar variables de entorno
-cp .env.example .env.local
-
-# Ejecutar en modo desarrollo
-npm run dev
-
-# Construir para producción
-npm run build
-```
-
----
-
-## 📖 Uso de la Aplicación
-
-### Para Estudiantes
-
-1. **Registro e Inicio de Sesión** con correo institucional
-2. **Seleccionar módulo de estudio** o tipo de prueba
-3. **Realizar evaluación** con retroalimentación inmediata
-4. **Revisar resultados** y análisis detallado de desempeño
-5. **Acceder a material de repaso** según áreas de mejora
-
-### Para Administradores
-
-1. **Dashboard de administración** para monitoreo
-2. **Gestión de contenido** educativo
-3. **Generación de reportes** institucionales
-4. **Mantenimiento del sistema** y actualizaciones
-
----
-
-## 📊 Métricas y Analítica
-
-La plataforma registra y analiza:
-
-- Tasa de aciertos por competencia
-- Identificación de temas críticos
-
----
-
-## 🔐 Seguridad
-
-- ✅ Autenticación JWT con credenciales institucionales
-- ✅ Validación de datos en backend y frontend
-- ✅ HTTPS en producción
-- ✅ Protección contra ataques CSRF
-- ✅ Roles y permisos granulares
-
----
-
-## 🚀 Despliegue
-
-### Desarrollo Local
-
-```bash
-# Backend
-cd backend
-python manage.py runserver
-
-# Frontend (en otra terminal)
-cd frontend
-npm run dev
-```
-
-### Producción
-
-**Frontend en Vercel:**
-```bash
-# Vercel detectará automáticamente la configuración desde vercel.json
-# Simplemente haz push a tu rama principal
-git push origin main
-# Vercel desplegará automáticamente
-```
-
-**Backend:**
-- Disponible en: Pendiente de definir infraestructura
-- Base de datos: PostgreSQL en producción
-
----
-
-## 📚 Documentación Adicional
-
-- **[API Documentation](./backend/docs/api.md)** - Referencia completa de endpoints
-- **[Database Schema](./backend/docs/schema.md)** - Estructura de datos
-- **[Contributing Guide](./CONTRIBUTING.md)** - Guía para contribuidores
-- **[Deployment Guide](./docs/DEPLOYMENT.md)** - Instrucciones de despliegue
-
-
----
-
-## 📝 Licencia
-
-Este proyecto está licenciado bajo Licencia Institucional.
-
----
-
-## 📧 Contacto y Soporte
-
-- **Autores**: Oscar Perdomo, Santiago Vivieros
-- **Universidad**: Universidad Surcolombiana
-- **Programa**: Licenciatura en Matemática
-- **Email**: u20192184281@usco.edu.co, u20211195526@usco.edu.co
-- **Repositorio**: [saber-pro](https://github.com/oscarperdomop/saber-pro)
-
----
-
-## 🙏 Agradecimientos
-
-- **Universidad Surcolombiana** por el apoyo académico y la confianza depositada en este proyecto
-- **Programa de Licenciatura en Matemática** por proporcionar el contexto y los requisitos para esta iniciativa
-- **Semillero DevUrity** por el apoyo técnico, mentoría y cultura de innovación
-- Comunidad de Django y React por las herramientas excelentes
-- Tutores y evaluadores del proyecto de grado
-
----
-
-**Última actualización**: Febrero 2026
+- Oscar Perdomo
+- Santiago Vivieros
+- Universidad Surcolombiana, Licenciatura en Matematica
