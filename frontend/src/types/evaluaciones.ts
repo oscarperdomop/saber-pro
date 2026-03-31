@@ -87,6 +87,9 @@ export interface Pregunta {
   enunciado: string
   contexto_texto: string | null
   contexto_imagen: string | null
+  imagen_grafica: string | null
+  codigo_latex: string | null
+  soporte_multimedia: 'NINGUNO' | 'IMAGEN' | 'LATEX' | string
   opciones: Opcion[]
 }
 

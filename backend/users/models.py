@@ -19,10 +19,12 @@ class ProgramaAcademico(models.Model):
 
 class Usuario(AbstractBaseUser, PermissionsMixin):
     ROL_ADMIN = 'ADMIN'
+    ROL_PROFESOR = 'PROFESOR'
     ROL_ESTUDIANTE = 'ESTUDIANTE'
 
     OPCIONES_ROL = [
         (ROL_ADMIN, 'Administrador'),
+        (ROL_PROFESOR, 'Profesor'),
         (ROL_ESTUDIANTE, 'Estudiante'),
     ]
 
@@ -34,9 +36,9 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     ]
 
     GENERO_CHOICES = [
-        ('M', 'M'),
-        ('F', 'F'),
-        ('O', 'O'),
+        ('M', 'Masculino'),
+        ('F', 'Femenino'),
+        ('O', 'Otro'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -46,7 +48,12 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     nombres = models.CharField(max_length=100)
     apellidos = models.CharField(max_length=100)
     correo_institucional = models.EmailField(unique=True)
-    genero = models.CharField(max_length=1, choices=GENERO_CHOICES, null=True, blank=True)
+    genero = models.CharField(max_length=2, choices=GENERO_CHOICES, null=True, blank=True)
+    semestre_actual = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text='Semestre que cursa actualmente (ej. 1 al 10)',
+    )
     programa = models.ForeignKey(
         ProgramaAcademico,
         on_delete=models.PROTECT,
@@ -64,8 +71,14 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ['documento', 'nombres', 'apellidos']
 
     def save(self, *args, **kwargs):
-        self.is_staff = self.rol == self.ROL_ADMIN
-        self.is_superuser = self.rol == self.ROL_ADMIN
+        if self.rol == self.ROL_ADMIN:
+            self.is_staff = True
+            self.is_superuser = True
+        elif self.rol == self.ROL_ESTUDIANTE:
+            self.is_staff = False
+            self.is_superuser = False
+        elif self.rol == self.ROL_PROFESOR:
+            self.is_superuser = False
 
         update_fields = kwargs.get('update_fields')
         if update_fields is not None:
@@ -73,6 +86,8 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
 
             if 'rol' in normalized_fields:
                 normalized_fields.update({'is_staff', 'is_superuser'})
+            if 'is_staff' in normalized_fields:
+                normalized_fields.add('is_superuser')
 
             kwargs['update_fields'] = list(normalized_fields)
 

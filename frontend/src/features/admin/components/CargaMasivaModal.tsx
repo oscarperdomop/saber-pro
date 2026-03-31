@@ -29,9 +29,12 @@ const CargaMasivaModal = ({ isOpen, onClose }: CargaMasivaModalProps) => {
   const queryClient = useQueryClient()
 
   const descargarPlantilla = () => {
-    const cabeceras = 'documento;tipo_documento;nombres;apellidos;correo_institucional;programa\r\n'
-    const ejemplo = '1001234567;CC;Juan;Perez;juan.perez@usco.edu.co;Ingenieria de Software\r\n'
-    const blob = new Blob(['\ufeff', cabeceras, ejemplo], { type: 'text/csv;charset=utf-8;' })
+    const separador = 'sep=;\r\n'
+    const cabeceras =
+      'documento;tipo_documento;nombres;apellidos;correo_institucional;programa;genero;semestre\r\n'
+    const ejemplo =
+      '1001234567;CC;Juan;Perez;juan.perez@usco.edu.co;Ingenieria de Software;M;5\r\n'
+    const blob = new Blob(['\ufeff', separador, cabeceras, ejemplo], { type: 'text/csv;charset=utf-8;' })
 
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
@@ -87,8 +90,8 @@ const CargaMasivaModal = ({ isOpen, onClose }: CargaMasivaModalProps) => {
   return (
     <>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-usco-ocre/80 bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-md rounded-2xl border border-usco-ocre/80 bg-white p-6 shadow-xl">
             <div className="mb-5 flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
                 <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-usco-fondo text-usco-vino">
@@ -98,7 +101,7 @@ const CargaMasivaModal = ({ isOpen, onClose }: CargaMasivaModalProps) => {
                   <h2 className="text-lg font-bold text-usco-vino">Carga Masiva de Estudiantes</h2>
                   <p className="mt-1 text-sm text-usco-gris">
                     Sube un archivo .xlsx o .csv con las columnas: documento, tipo_documento, nombres,
-                    apellidos, correo_institucional, programa.
+                    apellidos, correo_institucional, programa, genero y semestre.
                   </p>
                   <div className="mb-4 mt-3 rounded-md border border-blue-200 bg-blue-50 p-3">
                     <button
@@ -168,8 +171,8 @@ const CargaMasivaModal = ({ isOpen, onClose }: CargaMasivaModalProps) => {
       )}
 
       {successMessage && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-usco-ocre/80 bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45">
+          <div className="mx-4 w-full max-w-md rounded-2xl border border-usco-ocre/80 bg-white p-6 shadow-2xl">
             <div className="mb-4 flex items-start gap-3">
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-700">
                 <CheckCircle2 className="h-5 w-5" />
@@ -197,3 +200,5 @@ const CargaMasivaModal = ({ isOpen, onClose }: CargaMasivaModalProps) => {
 }
 
 export default CargaMasivaModal
+
+

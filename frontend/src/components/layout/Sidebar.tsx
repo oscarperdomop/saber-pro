@@ -11,8 +11,8 @@ import {
   UserCircle2,
   Users,
 } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
-import { resolveUserRole, useAuthStore } from '../../hooks/useAuthStore'
+import { Link, NavLink } from 'react-router-dom'
+import { hasAdminAccess, resolveUserRole, useAuthStore } from '../../hooks/useAuthStore'
 import type { UserRole } from '../../types/auth'
 
 interface NavItem {
@@ -20,6 +20,8 @@ interface NavItem {
   label: string
   icon: typeof LayoutDashboard
   roles: UserRole[]
+  requiresStaffForProfessor?: boolean
+  hideForStaffProfessor?: boolean
 }
 
 interface SidebarProps {
@@ -29,21 +31,84 @@ interface SidebarProps {
 }
 
 const navItems: NavItem[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
-  { to: '/perfil', label: 'Mi Perfil', icon: UserCircle2, roles: ['ADMIN'] },
+  {
+    to: '/dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    roles: ['ADMIN', 'PROFESOR'],
+    requiresStaffForProfessor: true,
+  },
+  {
+    to: '/perfil',
+    label: 'Mi Perfil',
+    icon: UserCircle2,
+    roles: ['ADMIN', 'PROFESOR'],
+    requiresStaffForProfessor: true,
+  },
   { to: '/usuarios', label: 'Usuarios', icon: Users, roles: ['ADMIN'] },
-  { to: '/preguntas', label: 'Banco de Preguntas', icon: Database, roles: ['ADMIN'] },
-  { to: '/simulacros', label: 'Simulacros', icon: FileText, roles: ['ADMIN'] },
-  { to: '/modulos/especificaciones', label: 'Especificaciones', icon: Settings2, roles: ['ADMIN'] },
-  { to: '/estudiante/dashboard', label: 'Inicio', icon: LayoutDashboard, roles: ['ESTUDIANTE'] },
-  { to: '/evaluaciones', label: 'Mis Examenes', icon: BookCheck, roles: ['ESTUDIANTE'] },
-  { to: '/perfil', label: 'Mi Perfil', icon: UserCircle2, roles: ['ESTUDIANTE'] },
+  {
+    to: '/preguntas',
+    label: 'Banco de Preguntas',
+    icon: Database,
+    roles: ['ADMIN', 'PROFESOR'],
+    requiresStaffForProfessor: true,
+  },
+  {
+    to: '/simulacros',
+    label: 'Simulacros',
+    icon: FileText,
+    roles: ['ADMIN', 'PROFESOR'],
+    requiresStaffForProfessor: true,
+  },
+  {
+    to: '/modulos/especificaciones',
+    label: 'Especificaciones',
+    icon: Settings2,
+    roles: ['ADMIN', 'PROFESOR'],
+    requiresStaffForProfessor: true,
+  },
+  {
+    to: '/estudiante/dashboard',
+    label: 'Inicio',
+    icon: LayoutDashboard,
+    roles: ['ESTUDIANTE', 'PROFESOR'],
+    hideForStaffProfessor: true,
+  },
+  {
+    to: '/evaluaciones',
+    label: 'Mis Examenes',
+    icon: BookCheck,
+    roles: ['ESTUDIANTE', 'PROFESOR'],
+    hideForStaffProfessor: true,
+  },
+  {
+    to: '/perfil',
+    label: 'Mi Perfil',
+    icon: UserCircle2,
+    roles: ['ESTUDIANTE', 'PROFESOR'],
+    hideForStaffProfessor: true,
+  },
 ]
 
 const Sidebar = ({ isSidebarOpen, isSidebarCollapsed, onCloseMobileSidebar }: SidebarProps) => {
   const { logout, user } = useAuthStore()
   const role = resolveUserRole(user)
-  const visibleNavItems = navItems.filter((item) => item.roles.includes(role))
+  const dashboardPath = hasAdminAccess(user) ? '/dashboard' : '/estudiante/dashboard'
+  const visibleNavItems = navItems.filter((item) => {
+    if (!item.roles.includes(role)) {
+      return false
+    }
+
+    if (role === 'PROFESOR' && item.requiresStaffForProfessor && !user?.is_staff) {
+      return false
+    }
+
+    if (role === 'PROFESOR' && item.hideForStaffProfessor && user?.is_staff) {
+      return false
+    }
+
+    return true
+  })
 
   return (
     <>
@@ -62,7 +127,19 @@ const Sidebar = ({ isSidebarOpen, isSidebarCollapsed, onCloseMobileSidebar }: Si
         } ${isSidebarCollapsed ? 'w-20' : 'w-72 md:w-64'}`}
       >
         <div className="flex h-16 items-center border-b border-usco-ocre/70 px-4 md:px-5">
-          <div className="flex items-center gap-2.5">
+          <Link
+            to={dashboardPath}
+            onClick={() => {
+              if (window.innerWidth < 768) {
+                onCloseMobileSidebar()
+              }
+            }}
+            className={`flex items-center gap-2.5 rounded-lg transition hover:opacity-90 ${
+              isSidebarCollapsed ? 'mx-auto' : ''
+            }`}
+            aria-label="Ir al inicio"
+            title="Ir al dashboard"
+          >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-usco-vino text-white">
               <GraduationCap className="h-[18px] w-[18px]" />
             </div>
@@ -72,7 +149,7 @@ const Sidebar = ({ isSidebarOpen, isSidebarCollapsed, onCloseMobileSidebar }: Si
                 <h1 className="mt-0.5 text-[26px] font-bold text-usco-vino">USCO</h1>
               </div>
             )}
-          </div>
+          </Link>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-3">

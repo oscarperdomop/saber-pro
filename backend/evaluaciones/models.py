@@ -40,6 +40,11 @@ class Pregunta(models.Model):
         ('Publicada', 'Publicada'),
         ('Archivada', 'Archivada'),
     ]
+    SOPORTE_MULTIMEDIA_CHOICES = [
+        ('NINGUNO', 'Ninguno'),
+        ('IMAGEN', 'Imagen'),
+        ('LATEX', 'LaTeX'),
+    ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     modulo = models.ForeignKey(ModuloPrueba, on_delete=models.CASCADE)
@@ -48,11 +53,23 @@ class Pregunta(models.Model):
     nivel_dificultad = models.CharField(max_length=15, choices=NIVEL_DIFICULTAD_CHOICES)
     contexto_texto = models.TextField(null=True, blank=True)
     contexto_imagen = models.ImageField(upload_to='preguntas/contextos/', null=True, blank=True)
+    imagen_grafica = models.ImageField(upload_to='preguntas_graficas/', null=True, blank=True)
+    codigo_latex = models.TextField(null=True, blank=True)
+    soporte_multimedia = models.CharField(
+        max_length=10,
+        choices=SOPORTE_MULTIMEDIA_CHOICES,
+        default='NINGUNO',
+    )
     enunciado = models.TextField()
     justificacion = models.TextField(null=True, blank=True)
     limite_palabras = models.IntegerField(default=3000, null=True, blank=True)
     rubrica_evaluacion = models.TextField(null=True, blank=True)
     estado = models.CharField(max_length=15, default='Borrador', choices=ESTADO_CHOICES)
+    lote_id = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text='ID de la carga masiva que origino esta pregunta',
+    )
     version_original = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

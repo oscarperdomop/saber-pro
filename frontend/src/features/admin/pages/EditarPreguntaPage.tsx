@@ -7,6 +7,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import especificacionesService from '../services/especificacionesService'
 import preguntasService from '../services/preguntasService'
 import type { ActualizarPreguntaResult } from '../services/preguntasService'
+import KaTeXPreview from '../../../components/ui/KaTeXPreview'
 import type { Categoria, Competencia } from '../../../types/evaluaciones'
 import type { Modulo, Pregunta } from '../../../types/preguntas'
 
@@ -90,6 +91,12 @@ const EditarPreguntaPage = () => {
   const [estado, setEstado] = useState<'Borrador' | 'Publicada' | 'Archivada'>('Borrador')
   const [enunciado, setEnunciado] = useState('')
   const [contextoTexto, setContextoTexto] = useState('')
+  const [soporteMultimedia, setSoporteMultimedia] = useState<'NINGUNO' | 'IMAGEN' | 'LATEX'>(
+    'NINGUNO',
+  )
+  const [imagenGrafica, setImagenGrafica] = useState<File | string | null>(null)
+  const [imagenGraficaPreview, setImagenGraficaPreview] = useState<string | null>(null)
+  const [codigoLatex, setCodigoLatex] = useState('')
   const [limitePalabras, setLimitePalabras] = useState<number>(300)
   const [opciones, setOpciones] = useState<OpcionForm[]>([
     { texto: '', es_correcta: true, imagen: null, previewUrl: null },
@@ -164,6 +171,14 @@ const EditarPreguntaPage = () => {
     )
     setEnunciado(String(pregunta.enunciado ?? ''))
     setContextoTexto(String(pregunta.contexto_texto ?? ''))
+    const soporteInicial = (
+      pregunta.soporte_multimedia ??
+      (pregunta.imagen_grafica ? 'IMAGEN' : pregunta.codigo_latex ? 'LATEX' : 'NINGUNO')
+    ) as 'NINGUNO' | 'IMAGEN' | 'LATEX'
+    setSoporteMultimedia(soporteInicial)
+    setImagenGrafica(pregunta.imagen_grafica ?? null)
+    setImagenGraficaPreview(null)
+    setCodigoLatex(String(pregunta.codigo_latex ?? ''))
     setLimitePalabras(Number(pregunta.limite_palabras ?? 300))
 
     const tieneImagenes = (pregunta.opciones ?? []).some((opcion) => Boolean(opcion.imagen))
@@ -198,6 +213,14 @@ const EditarPreguntaPage = () => {
 
     setInitialized(true)
   }, [pregunta, initialized])
+
+  useEffect(() => {
+    return () => {
+      if (imagenGraficaPreview) {
+        URL.revokeObjectURL(imagenGraficaPreview)
+      }
+    }
+  }, [imagenGraficaPreview])
 
   const editarPreguntaMutation = useMutation({
     mutationFn: preguntasService.actualizarPregunta,
@@ -300,6 +323,30 @@ const EditarPreguntaPage = () => {
     )
   }
 
+  const handleSoporteMultimediaChange = (value: 'NINGUNO' | 'IMAGEN' | 'LATEX') => {
+    setSoporteMultimedia(value)
+
+    if (value !== 'IMAGEN') {
+      if (imagenGraficaPreview) {
+        URL.revokeObjectURL(imagenGraficaPreview)
+      }
+      setImagenGrafica(null)
+      setImagenGraficaPreview(null)
+    }
+
+    if (value !== 'LATEX') {
+      setCodigoLatex('')
+    }
+  }
+
+  const actualizarImagenGrafica = (file: File | null) => {
+    if (imagenGraficaPreview) {
+      URL.revokeObjectURL(imagenGraficaPreview)
+    }
+    setImagenGrafica(file)
+    setImagenGraficaPreview(file ? URL.createObjectURL(file) : null)
+  }
+
   const getImagenPreview = (opcion: OpcionForm) => {
     if (opcion.previewUrl) {
       return opcion.previewUrl
@@ -310,6 +357,21 @@ const EditarPreguntaPage = () => {
         return opcion.imagen
       }
       return `${backendOrigin}${opcion.imagen}`
+    }
+
+    return null
+  }
+
+  const getImagenGraficaPreview = () => {
+    if (imagenGraficaPreview) {
+      return imagenGraficaPreview
+    }
+
+    if (typeof imagenGrafica === 'string' && imagenGrafica.trim()) {
+      if (/^https?:\/\//i.test(imagenGrafica)) {
+        return imagenGrafica
+      }
+      return `${backendOrigin}${imagenGrafica}`
     }
 
     return null
@@ -343,6 +405,15 @@ const EditarPreguntaPage = () => {
 
     if (tipoPregunta === 'Ensayo' && (!limitePalabras || limitePalabras <= 0)) {
       return 'El limite de palabras debe ser mayor a 0.'
+    }
+
+    const tieneImagenGrafica = imagenGrafica instanceof File || typeof imagenGrafica === 'string'
+    if (soporteMultimedia === 'IMAGEN' && !tieneImagenGrafica) {
+      return 'Debes cargar una imagen grafica cuando el soporte multimedia es IMAGEN.'
+    }
+
+    if (soporteMultimedia === 'LATEX' && !codigoLatex.trim()) {
+      return 'Debes escribir codigo LaTeX cuando el soporte multimedia es LATEX.'
     }
 
     if (tipoPregunta === 'Opcion Multiple') {
@@ -386,6 +457,14 @@ const EditarPreguntaPage = () => {
     const normalizedCurrent = {
       enunciado: enunciado.trim(),
       contexto_texto: contextoTexto.trim(),
+      soporte_multimedia: soporteMultimedia,
+      codigo_latex: soporteMultimedia === 'LATEX' ? codigoLatex.trim() : '',
+      imagen_grafica:
+        soporteMultimedia === 'IMAGEN'
+          ? imagenGrafica instanceof File
+            ? `__new_file__${imagenGrafica.name}_${imagenGrafica.size}`
+            : String(imagenGrafica ?? '')
+          : '',
       tipo_pregunta: tipoPregunta,
       formato_opciones: formatoOpciones,
       dificultad,
@@ -419,6 +498,24 @@ const EditarPreguntaPage = () => {
     const normalizedOriginal = {
       enunciado: String(pregunta.enunciado ?? '').trim(),
       contexto_texto: String(pregunta.contexto_texto ?? '').trim(),
+      soporte_multimedia:
+        (pregunta.soporte_multimedia ??
+          (pregunta.imagen_grafica ? 'IMAGEN' : pregunta.codigo_latex ? 'LATEX' : 'NINGUNO')) as
+          | 'NINGUNO'
+          | 'IMAGEN'
+          | 'LATEX',
+      codigo_latex:
+        (pregunta.soporte_multimedia ??
+          (pregunta.imagen_grafica ? 'IMAGEN' : pregunta.codigo_latex ? 'LATEX' : 'NINGUNO')) ===
+        'LATEX'
+          ? String(pregunta.codigo_latex ?? '').trim()
+          : '',
+      imagen_grafica:
+        (pregunta.soporte_multimedia ??
+          (pregunta.imagen_grafica ? 'IMAGEN' : pregunta.codigo_latex ? 'LATEX' : 'NINGUNO')) ===
+        'IMAGEN'
+          ? String(pregunta.imagen_grafica ?? '')
+          : '',
       tipo_pregunta: pregunta.tipo_pregunta === 'Ensayo' ? 'Ensayo' : 'Opcion Multiple',
       formato_opciones: originalFormato,
       dificultad: mapDificultadFromPregunta(String(pregunta.dificultad ?? 'Media')),
@@ -475,6 +572,13 @@ const EditarPreguntaPage = () => {
     formData.append('categoria', String(Number(categoriaId)))
     formData.append('competencia', String(Number(competenciaId)))
     formData.append('contexto_texto', contextoTexto.trim())
+    formData.append('soporte_multimedia', soporteMultimedia)
+    if (soporteMultimedia === 'IMAGEN' && imagenGrafica instanceof File) {
+      formData.append('imagen_grafica', imagenGrafica)
+    }
+    if (soporteMultimedia === 'LATEX' && codigoLatex.trim()) {
+      formData.append('codigo_latex', codigoLatex.trim())
+    }
 
     if (tipoPregunta === 'Ensayo') {
       formData.append('limite_palabras', String(limitePalabras))
@@ -676,6 +780,7 @@ const EditarPreguntaPage = () => {
                 required
               />
             </label>
+            <KaTeXPreview text={enunciado} label="Vista previa del enunciado" />
 
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">Contexto (Opcional)</span>
@@ -686,6 +791,60 @@ const EditarPreguntaPage = () => {
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
               />
             </label>
+            <KaTeXPreview text={contextoTexto} label="Vista previa del contexto" />
+
+            <div className="rounded-xl border border-usco-ocre/70 bg-usco-fondo p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-usco-gris">
+                Contenido Multimedia
+              </p>
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-usco-gris">Soporte</span>
+                <select
+                  value={soporteMultimedia}
+                  onChange={(event) =>
+                    handleSoporteMultimediaChange(
+                      event.target.value as 'NINGUNO' | 'IMAGEN' | 'LATEX',
+                    )
+                  }
+                  className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
+                >
+                  <option value="NINGUNO">Ninguno</option>
+                  <option value="IMAGEN">Imagen</option>
+                  <option value="LATEX">LaTeX</option>
+                </select>
+              </label>
+
+              {soporteMultimedia === 'IMAGEN' && (
+                <div className="mt-3 space-y-2">
+                  <input
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.webp"
+                    onChange={(event) => actualizarImagenGrafica(event.target.files?.[0] ?? null)}
+                    className="w-full rounded border border-gray-300 p-2 text-xs text-usco-gris file:mr-2 file:rounded file:border-0 file:bg-usco-vino file:px-2 file:py-1 file:text-xs file:font-semibold file:text-white"
+                  />
+                  {getImagenGraficaPreview() && (
+                    <img
+                      src={getImagenGraficaPreview() ?? undefined}
+                      alt="Vista previa de grafica"
+                      className="max-h-52 w-full rounded border border-gray-200 bg-white object-contain"
+                    />
+                  )}
+                </div>
+              )}
+
+              {soporteMultimedia === 'LATEX' && (
+                <div className="mt-3 space-y-2">
+                  <textarea
+                    value={codigoLatex}
+                    onChange={(event) => setCodigoLatex(event.target.value)}
+                    rows={4}
+                    placeholder="$\\frac{2}{1212}$"
+                    className="w-full rounded border border-gray-300 p-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
+                  />
+                  <KaTeXPreview text={codigoLatex} label="Vista previa LaTeX" />
+                </div>
+              )}
+            </div>
           </section>
 
           <section className="space-y-4 rounded-2xl border border-usco-ocre/80 bg-white p-5 shadow-sm">
@@ -743,12 +902,19 @@ const EditarPreguntaPage = () => {
                       className="mb-3 flex items-start gap-3 rounded-md border border-gray-200 bg-white p-3 shadow-sm"
                     >
                       {formatoOpciones === 'texto' ? (
-                        <textarea
-                          value={opcion.texto}
-                          onChange={(event) => actualizarTextoOpcion(index, event.target.value)}
-                          className="min-h-[80px] flex-1 resize-y rounded border border-gray-300 p-2 text-sm text-usco-gris focus:border-usco-vino focus:ring-usco-vino"
-                          placeholder={`Texto de la opcion ${index + 1}`}
-                        />
+                        <div className="flex-1 space-y-2">
+                          <textarea
+                            value={opcion.texto}
+                            onChange={(event) => actualizarTextoOpcion(index, event.target.value)}
+                            className="min-h-[80px] w-full resize-y rounded border border-gray-300 p-2 text-sm text-usco-gris focus:border-usco-vino focus:ring-usco-vino"
+                            placeholder={`Texto de la opcion ${index + 1}`}
+                          />
+                          <KaTeXPreview
+                            text={opcion.texto}
+                            label={`Vista previa opcion ${index + 1}`}
+                            className="bg-white"
+                          />
+                        </div>
                       ) : (
                         <div className="flex w-full flex-1 flex-col gap-2">
                           <input

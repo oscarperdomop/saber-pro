@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom'
-import { getStoredUser, resolveUserRole } from '../../../hooks/useAuthStore'
+import { getStoredUser, hasAdminAccess } from '../../../hooks/useAuthStore'
 import DashboardEstudiantePage from '../../estudiante/pages/DashboardEstudiantePage'
 import AdminDashboard from './AdminDashboard'
 
@@ -10,7 +10,7 @@ const DashboardPage = () => {
     return <Navigate to="/" replace />
   }
 
-  if (resolveUserRole(user) === 'ADMIN') {
+  if (hasAdminAccess(user)) {
     return <AdminDashboard />
   }
 

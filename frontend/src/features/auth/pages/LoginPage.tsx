@@ -29,9 +29,23 @@ const LoginPage = () => {
     });
   };
 
-  const errorMessage =
-    loginMutation.error?.response?.data?.detail ??
-    "Credenciales incorrectas. Verifica tu correo institucional y contrasena.";
+  const errorData = loginMutation.error?.response?.data as
+    | { detail?: string | { message?: string; code?: string }; code?: string }
+    | undefined;
+  const backendDetail =
+    typeof errorData?.detail === "string"
+      ? errorData.detail
+      : errorData?.detail?.message ?? "";
+  const backendCode =
+    errorData?.code ??
+    (typeof errorData?.detail === "object" ? errorData.detail?.code : undefined);
+  const isInactiveAccountError =
+    backendCode === "inactive_account" ||
+    (backendDetail ?? "").toLowerCase().includes("cuenta inactiva");
+
+  const errorMessage = isInactiveAccountError
+    ? "Tu cuenta ha sido desactivada por la institución. Por favor, comunícate con Soporte Técnico."
+    : backendDetail || "Credenciales incorrectas. Verifica tu correo institucional y contraseña.";
 
   const features = [
     {
@@ -213,9 +227,15 @@ const LoginPage = () => {
               </label>
 
               {loginMutation.isError && (
-                <p className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <div
+                  className={`rounded-xl border px-4 py-3 text-sm ${
+                    isInactiveAccountError
+                      ? "border-red-400 bg-red-100 text-red-800"
+                      : "border-red-300 bg-red-50 text-red-700"
+                  }`}
+                >
                   {errorMessage}
-                </p>
+                </div>
               )}
 
               <button

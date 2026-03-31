@@ -4,11 +4,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, BarChart2, Edit, Eye, Lock, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import simulacrosService from '../services/simulacrosService'
+import ConfirmDialog from '../../../components/ui/ConfirmDialog'
 import type { PlantillaExamen } from '../../../types/evaluaciones'
 
 interface ApiErrorResponse {
   detail?: string
   detalle?: string
+}
+
+interface ConfirmActionState {
+  type: 'delete' | 'archive'
+  id: string | number
 }
 
 const formatDate = (isoDate: string): string => {
@@ -32,6 +38,7 @@ const SimulacrosPage = () => {
   const [successMessage, setSuccessMessage] = useState('')
   const [actionError, setActionError] = useState('')
   const [mostrarArchivados, setMostrarArchivados] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<ConfirmActionState | null>(null)
 
   const { data, isLoading, isError, error } = useQuery<PlantillaExamen[], AxiosError<ApiErrorResponse>>({
     queryKey: ['simulacros', mostrarArchivados],
@@ -108,27 +115,27 @@ const SimulacrosPage = () => {
   const simulacros = data ?? []
 
   const handleEliminar = (id: string | number) => {
-    const shouldDelete = window.confirm(
-      'Estas seguro de eliminar este simulacro? Esta accion no se puede deshacer.',
-    )
-
-    if (!shouldDelete) {
-      return
-    }
-
-    eliminarSimulacroMutation.mutate(id)
+    setConfirmAction({ type: 'delete', id })
   }
 
   const handleArchivar = (id: string | number) => {
-    const shouldArchive = window.confirm(
-      'Estas seguro de archivar este simulacro? Se ocultara de la tabla principal.',
-    )
+    setConfirmAction({ type: 'archive', id })
+  }
 
-    if (!shouldArchive) {
+  const handleConfirmAction = () => {
+    if (!confirmAction) {
       return
     }
 
-    archivarSimulacroMutation.mutate(id)
+    const actionToRun = confirmAction
+    setConfirmAction(null)
+
+    if (actionToRun.type === 'delete') {
+      eliminarSimulacroMutation.mutate(actionToRun.id)
+      return
+    }
+
+    archivarSimulacroMutation.mutate(actionToRun.id)
   }
 
   return (
@@ -292,6 +299,21 @@ const SimulacrosPage = () => {
           </tbody>
         </table>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(confirmAction)}
+        title={confirmAction?.type === 'delete' ? 'Eliminar simulacro' : 'Archivar simulacro'}
+        message={
+          confirmAction?.type === 'delete'
+            ? 'Esta accion no se puede deshacer. Se eliminara el simulacro de forma permanente.'
+            : 'El simulacro se ocultara de la tabla principal y pasara al historial.'
+        }
+        confirmText={confirmAction?.type === 'delete' ? 'Eliminar' : 'Archivar'}
+        cancelText="Cancelar"
+        isLoading={eliminarSimulacroMutation.isPending || archivarSimulacroMutation.isPending}
+        onConfirm={handleConfirmAction}
+        onCancel={() => setConfirmAction(null)}
+      />
     </section>
   )
 }

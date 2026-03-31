@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AxiosError } from 'axios'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  AlertTriangle,
   BookOpen,
   Calculator,
+  Eye,
   FileQuestion,
   Filter,
   Globe,
@@ -11,11 +13,21 @@ import {
   Plus,
   Search,
   SortAsc,
+  Upload,
   Users2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import preguntasService from '../services/preguntasService'
+import CargaMasivaPreguntasModal from '../components/CargaMasivaPreguntasModal'
+import VisualizarPreguntaModal from '../components/VisualizarPreguntaModal'
+import preguntasService, {
+  type CargaMasivaPreguntasResponse,
+  type PreguntaCriticaRow,
+} from '../services/preguntasService'
+import usuariosService from '../services/usuariosService'
+import ConfirmDialog from '../../../components/ui/ConfirmDialog'
+import RichTextRenderer from '../../../components/ui/RichTextRenderer'
+import type { Programa } from '../../../types/evaluaciones'
 import type { Modulo, Pregunta } from '../../../types/preguntas'
 
 interface ApiErrorResponse {
@@ -41,6 +53,8 @@ interface ModuloTheme {
   text: string
   button: string
 }
+
+const ULTIMO_LOTE_STORAGE_KEY = 'preguntas_carga_masiva_ultimo_lote'
 
 const getModuloNombre = (pregunta: Pregunta): string => {
   if (!pregunta) {
@@ -182,17 +196,100 @@ const BancoPreguntasPage = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedModulo, setSelectedModulo] = useState('')
   const [sortBy, setSortBy] = useState<'nombre' | 'total_desc' | 'total_asc'>('nombre')
+  const [verPreguntasCriticas, setVerPreguntasCriticas] = useState(false)
+  const [criticasProgramaId, setCriticasProgramaId] = useState<number | ''>('')
+  const [criticasNivel, setCriticasNivel] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false)
+  const [undoMessage, setUndoMessage] = useState('')
+  const [preguntaCriticaViendo, setPreguntaCriticaViendo] = useState<Pregunta | null>(null)
+  const [ultimoLote, setUltimoLote] = useState<string | null>(null)
+  const [lotePendienteRevertir, setLotePendienteRevertir] = useState<string | null>(null)
+  const [resumenUltimoLote, setResumenUltimoLote] = useState<{
+    preguntasCreadas: number
+    filasConIA: number
+  } | null>(null)
 
   const navigate = useNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
 
   const { data, isLoading, isError, error } = useQuery<Pregunta[], AxiosError<ApiErrorResponse>>({
     queryKey: ['preguntas'],
     queryFn: () => preguntasService.getPreguntas(),
   })
+  const { data: modulos = [] } = useQuery<Modulo[], AxiosError<ApiErrorResponse>>({
+    queryKey: ['modulos'],
+    queryFn: preguntasService.getModulos,
+  })
+  const { data: programas = [] } = useQuery<Programa[]>({
+    queryKey: ['programas'],
+    queryFn: usuariosService.getProgramas,
+  })
+  const { data: criticasData, isFetching: isCriticasLoading } = useQuery({
+    queryKey: ['preguntasCriticas', criticasProgramaId, criticasNivel, searchTerm],
+    queryFn: () =>
+      preguntasService.getPreguntasCriticas({
+        umbral: 60,
+        programaId: criticasProgramaId,
+        nivel: criticasNivel,
+        search: searchTerm.trim(),
+      }),
+    enabled: verPreguntasCriticas,
+  })
 
   const preguntas = data ?? []
+  const preguntasCriticas: PreguntaCriticaRow[] = criticasData?.results ?? []
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    try {
+      const raw = window.localStorage.getItem(ULTIMO_LOTE_STORAGE_KEY)
+      if (!raw) {
+        return
+      }
+
+      const parsed = JSON.parse(raw) as {
+        loteId?: string
+        preguntasCreadas?: number
+        filasConIA?: number
+      }
+
+      if (!parsed?.loteId) {
+        return
+      }
+
+      setUltimoLote(parsed.loteId)
+      setResumenUltimoLote({
+        preguntasCreadas: Number(parsed.preguntasCreadas ?? 0),
+        filasConIA: Number(parsed.filasConIA ?? 0),
+      })
+    } catch {
+      // noop
+    }
+  }, [])
+
+  const revertirCargaMutation = useMutation({
+    mutationFn: preguntasService.revertirCargaMasiva,
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['preguntas'] })
+      setUltimoLote(null)
+      setResumenUltimoLote(null)
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(ULTIMO_LOTE_STORAGE_KEY)
+      }
+      setUndoMessage(
+        response?.mensaje ??
+          `Se eliminó la carga masiva (${response?.cantidad_eliminada ?? 0} pregunta(s)).`,
+      )
+    },
+    onError: () => {
+      setUndoMessage('No fue posible deshacer la carga masiva en este momento.')
+    },
+  })
 
   const moduloOptions = useMemo(() => {
     const names = Array.from(new Set(preguntas.map((pregunta) => getModuloNombre(pregunta))))
@@ -271,6 +368,61 @@ const BancoPreguntasPage = () => {
     return () => window.clearTimeout(timeoutId)
   }, [successMessage])
 
+  useEffect(() => {
+    if (!undoMessage) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setUndoMessage(''), 4000)
+    return () => window.clearTimeout(timeoutId)
+  }, [undoMessage])
+
+  const handleCargaMasivaSuccess = (response: CargaMasivaPreguntasResponse) => {
+    if (response.lote_id) {
+      setUltimoLote(response.lote_id)
+      setResumenUltimoLote({
+        preguntasCreadas: response.preguntas_creadas,
+        filasConIA: response.filas_con_ia,
+      })
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(
+          ULTIMO_LOTE_STORAGE_KEY,
+          JSON.stringify({
+            loteId: response.lote_id,
+            preguntasCreadas: response.preguntas_creadas,
+            filasConIA: response.filas_con_ia,
+            createdAt: Date.now(),
+          }),
+        )
+      }
+      setUndoMessage('')
+      return
+    }
+
+    setUltimoLote(null)
+    setResumenUltimoLote(null)
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(ULTIMO_LOTE_STORAGE_KEY)
+    }
+  }
+
+  const handleRevertirCarga = (loteId: string) => {
+    if (!loteId) {
+      return
+    }
+    setLotePendienteRevertir(loteId)
+  }
+
+  const confirmarReversionLote = () => {
+    if (!lotePendienteRevertir) {
+      return
+    }
+
+    const loteId = lotePendienteRevertir
+    setLotePendienteRevertir(null)
+    revertirCargaMutation.mutate(loteId)
+  }
+
   if (isLoading) {
     return (
       <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-usco-gris shadow-sm">
@@ -297,19 +449,56 @@ const BancoPreguntasPage = () => {
           <p className="mt-1 text-sm text-usco-gris">Gestion modular de preguntas para el ecosistema Saber Pro.</p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => navigate('/preguntas/nueva')}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-usco-vino px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#741017]"
-        >
-          <Plus className="h-4 w-4" />
-          Nueva Pregunta
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => setIsBulkModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-usco-gris px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3e4f58]"
+          >
+            <Upload className="h-4 w-4" />
+            Carga Masiva (Excel)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/preguntas/nueva')}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-usco-vino px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#741017]"
+          >
+            <Plus className="h-4 w-4" />
+            Nueva Pregunta
+          </button>
+        </div>
       </header>
 
       {successMessage && (
         <section className="rounded-xl border border-usco-ocre/90 bg-usco-fondo p-4 text-sm text-usco-vino shadow-sm">
           {successMessage}
+        </section>
+      )}
+
+      {ultimoLote && (
+        <section className="flex flex-col gap-3 rounded-xl border-l-4 border-yellow-400 bg-yellow-50 p-4 text-sm text-yellow-800 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            Carga masiva completada
+            {resumenUltimoLote
+              ? ` (${resumenUltimoLote.preguntasCreadas} preguntas, ${resumenUltimoLote.filasConIA} filas con IA).`
+              : '.'}{' '}
+            Subiste el archivo equivocado?
+          </p>
+          <button
+            type="button"
+            onClick={() => handleRevertirCarga(ultimoLote)}
+            disabled={revertirCargaMutation.isPending}
+            className="font-bold text-red-700 underline transition hover:text-red-900 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {revertirCargaMutation.isPending ? 'Revirtiendo...' : 'Deshacer ultima carga'}
+          </button>
+        </section>
+      )}
+
+      {undoMessage && (
+        <section className="rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm text-blue-800 shadow-sm">
+          {undoMessage}
         </section>
       )}
 
@@ -377,6 +566,140 @@ const BancoPreguntasPage = () => {
           </label>
         </div>
       </section>
+
+      <section className="rounded-2xl border border-usco-ocre/80 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-xl border border-usco-ocre/80 bg-usco-fondo px-3 py-2 text-sm font-semibold text-usco-gris">
+            <input
+              type="checkbox"
+              checked={verPreguntasCriticas}
+              onChange={(event) => setVerPreguntasCriticas(event.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-usco-vino focus:ring-usco-vino"
+            />
+            <AlertTriangle className="h-4 w-4 text-usco-vino" />
+            Ver Preguntas Criticas (tasa de error &gt;= 60%)
+          </label>
+
+          {verPreguntasCriticas && (
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={criticasProgramaId}
+                onChange={(event) =>
+                  setCriticasProgramaId(event.target.value ? Number(event.target.value) : '')
+                }
+                className="rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none focus:border-usco-vino"
+              >
+                <option value="">Todos los programas</option>
+                {programas.map((programa) => (
+                  <option key={programa.id} value={programa.id}>
+                    {programa.nombre}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={criticasNivel}
+                onChange={(event) => setCriticasNivel(event.target.value)}
+                className="rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none focus:border-usco-vino"
+              >
+                <option value="">Todos los niveles</option>
+                <option value="Facil">Facil</option>
+                <option value="Media">Media</option>
+                <option value="Alta">Alta</option>
+              </select>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {verPreguntasCriticas && (
+        <section className="overflow-hidden rounded-2xl border border-usco-ocre/80 bg-white shadow-sm">
+          <header className="border-b border-usco-ocre/60 px-4 py-3">
+            <h3 className="text-base font-semibold text-usco-vino">Preguntas Criticas</h3>
+            <p className="text-sm text-usco-gris">
+              Audita preguntas con alta tasa de error para mejorar su redaccion.
+            </p>
+          </header>
+
+          {isCriticasLoading ? (
+            <div className="p-4 text-sm text-usco-gris">Cargando preguntas criticas...</div>
+          ) : preguntasCriticas.length === 0 ? (
+            <div className="p-4 text-sm text-usco-gris">
+              No hay preguntas criticas para los filtros seleccionados.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px]">
+                <thead className="bg-usco-fondo">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-usco-gris">
+                      Enunciado
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-usco-gris">
+                      Modulo
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-usco-gris">
+                      Nivel
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-usco-gris">
+                      Respondidas
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-usco-gris">
+                      Incorrectas
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-usco-gris">
+                      Tasa Error
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-usco-gris">
+                      Accion
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preguntasCriticas.map((pregunta, index) => (
+                    <tr
+                      key={String(pregunta.id)}
+                      className={index % 2 === 0 ? 'bg-white' : 'bg-usco-fondo/40'}
+                    >
+                      <td className="px-4 py-3 text-sm text-usco-gris">
+                        <div className="line-clamp-2 max-w-md" title={String(pregunta.enunciado ?? '')}>
+                          <RichTextRenderer
+                            content={String(pregunta.enunciado ?? '')}
+                            className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:m-0"
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-usco-gris">{getModuloNombre(pregunta)}</td>
+                      <td className="px-4 py-3 text-center text-sm text-usco-gris">
+                        {getDificultadLabel(String(pregunta.dificultad))}
+                      </td>
+                      <td className="px-4 py-3 text-center text-sm text-usco-gris">
+                        {pregunta.total_respondidas}
+                      </td>
+                      <td className="px-4 py-3 text-center text-sm text-usco-gris">
+                        {pregunta.respuestas_incorrectas}
+                      </td>
+                      <td className="px-4 py-3 text-center text-sm font-bold text-usco-vino">
+                        {pregunta.tasa_error}%
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setPreguntaCriticaViendo(pregunta)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-usco-vino px-3 py-1.5 text-xs font-semibold text-usco-vino transition hover:bg-usco-vino/10"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Ver Pregunta
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       {modulosEntries.length === 0 ? (
         <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-sm text-usco-gris shadow-sm">
@@ -469,9 +792,12 @@ const BancoPreguntasPage = () => {
               return (
                 <article key={String(pregunta.id)} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-usco-gris" title={pregunta.enunciado}>
-                      {pregunta.enunciado}
-                    </p>
+                    <div className="line-clamp-2 text-sm font-medium text-usco-gris" title={pregunta.enunciado}>
+                      <RichTextRenderer
+                        content={pregunta.enunciado}
+                        className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:m-0"
+                      />
+                    </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <span className="text-xs text-usco-gris/80">{modulo}</span>
                       <span
@@ -506,8 +832,34 @@ const BancoPreguntasPage = () => {
           </div>
         </section>
       )}
+
+      <CargaMasivaPreguntasModal
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        modulos={modulos}
+        onUploadSuccess={handleCargaMasivaSuccess}
+      />
+
+      <ConfirmDialog
+        open={Boolean(lotePendienteRevertir)}
+        title="Deshacer ultima carga masiva"
+        message="Se eliminaran todas las preguntas creadas en ese lote. Esta accion no se puede deshacer."
+        confirmText="Deshacer carga"
+        cancelText="Cancelar"
+        isLoading={revertirCargaMutation.isPending}
+        onConfirm={confirmarReversionLote}
+        onCancel={() => setLotePendienteRevertir(null)}
+      />
+
+      <VisualizarPreguntaModal
+        isOpen={Boolean(preguntaCriticaViendo)}
+        pregunta={preguntaCriticaViendo}
+        onClose={() => setPreguntaCriticaViendo(null)}
+      />
     </section>
   )
 }
 
 export default BancoPreguntasPage
+
+

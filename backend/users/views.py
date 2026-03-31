@@ -19,6 +19,7 @@ from .serializers import (
     CustomTokenObtainPairSerializer,
     MiPerfilSerializer,
     ProgramaAcademicoSerializer,
+    UsuarioCreateSerializer,
     UsuarioListadoSerializer,
     validate_new_password_rules,
 )
@@ -75,7 +76,48 @@ class CargaMasivaUsuariosView(APIView):
     def _to_upper(value):
         return value.upper() if isinstance(value, str) else value
 
+    @staticmethod
+    def _read_cell(row, *keys):
+        for key in keys:
+            value = row.get(key, None)
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            return value
+        return ''
+
+    @staticmethod
+    def _parse_genero(value):
+        normalized = str(value or '').strip().upper()
+        if not normalized:
+            return None
+        if normalized.startswith('M'):
+            return 'M'
+        if normalized.startswith('F'):
+            return 'F'
+        if normalized.startswith('O'):
+            return 'O'
+        return None
+
+    @staticmethod
+    def _parse_semestre(value):
+        normalized = str(value or '').strip()
+        if not normalized:
+            return None
+        try:
+            semestre = int(float(normalized))
+        except (TypeError, ValueError):
+            return None
+        return semestre if semestre > 0 else None
+
     def post(self, request):
+        if getattr(request.user, 'rol', None) != Usuario.ROL_ADMIN:
+            return Response(
+                {'detalle': 'Solo el Administrador Supremo puede gestionar usuarios.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         archivo = request.FILES.get('archivo') or request.FILES.get('file')
         if not archivo:
             return Response(
@@ -100,19 +142,54 @@ class CargaMasivaUsuariosView(APIView):
 
         creados = 0
         errores = []
+        documentos_existentes = {
+            str(value).strip().upper()
+            for value in Usuario.objects.values_list('documento', flat=True)
+            if value
+        }
+        correos_existentes = {
+            str(value).strip().lower()
+            for value in Usuario.objects.values_list('correo_institucional', flat=True)
+            if value
+        }
+        documentos_archivo = set()
+        correos_archivo = set()
 
         for index, row in df.iterrows():
             try:
                 with transaction.atomic():
-                    documento = self._limit_length(self._clean_value(row.get('documento')), 20)
-                    tipo_documento = self._limit_length(self._clean_value(row.get('tipo_documento')), 5)
-                    nombres = self._limit_length(self._clean_value(row.get('nombres')), 100)
-                    apellidos = self._limit_length(self._clean_value(row.get('apellidos')), 100)
+                    documento = self._limit_length(
+                        self._clean_value(self._read_cell(row, 'documento', 'DOCUMENTO')),
+                        20,
+                    )
+                    tipo_documento = self._limit_length(
+                        self._clean_value(self._read_cell(row, 'tipo_documento', 'TIPO_DOCUMENTO')),
+                        5,
+                    )
+                    nombres = self._limit_length(
+                        self._clean_value(self._read_cell(row, 'nombres', 'NOMBRES')),
+                        100,
+                    )
+                    apellidos = self._limit_length(
+                        self._clean_value(self._read_cell(row, 'apellidos', 'APELLIDOS')),
+                        100,
+                    )
                     correo_institucional = self._limit_length(
-                        self._clean_value(row.get('correo_institucional')).lower(),
+                        self._clean_value(
+                            self._read_cell(row, 'correo_institucional', 'CORREO_INSTITUCIONAL'),
+                        ).lower(),
                         254,
                     )
-                    nombre_programa = self._limit_length(self._clean_value(row.get('programa')), 150)
+                    nombre_programa = self._limit_length(
+                        self._clean_value(self._read_cell(row, 'programa', 'PROGRAMA')),
+                        150,
+                    )
+                    genero_raw = self._clean_value(self._read_cell(row, 'genero', 'GENERO'))
+                    semestre_raw = self._clean_value(
+                        self._read_cell(row, 'semestre_actual', 'semestre', 'SEMESTRE'),
+                    )
+                    genero = self._parse_genero(genero_raw)
+                    semestre_actual = self._parse_semestre(semestre_raw)
 
                     documento = self._to_upper(documento)
                     tipo_documento = self._to_upper(tipo_documento)
@@ -133,6 +210,19 @@ class CargaMasivaUsuariosView(APIView):
                         raise ValueError(
                             'Faltan campos obligatorios: documento, tipo_documento, nombres, '
                             'apellidos, correo_institucional, programa.'
+                        )
+
+                    if documento in documentos_existentes:
+                        raise ValueError('Documento duplicado: ya existe en la base de datos.')
+                    if correo_institucional in correos_existentes:
+                        raise ValueError(
+                            'Correo institucional duplicado: ya existe en la base de datos.',
+                        )
+                    if documento in documentos_archivo:
+                        raise ValueError('Documento duplicado dentro del archivo de carga.')
+                    if correo_institucional in correos_archivo:
+                        raise ValueError(
+                            'Correo institucional duplicado dentro del archivo de carga.',
                         )
 
                     codigo_snies = self._clean_value(row.get('codigo_snies')) or documento
@@ -161,9 +251,15 @@ class CargaMasivaUsuariosView(APIView):
                         nombres=nombres,
                         apellidos=apellidos,
                         programa=programa_obj,
+                        genero=genero,
+                        semestre_actual=semestre_actual,
                         es_primer_ingreso=True,
                     )
 
+                    documentos_existentes.add(documento)
+                    correos_existentes.add(correo_institucional)
+                    documentos_archivo.add(documento)
+                    correos_archivo.add(correo_institucional)
                     creados += 1
             except Exception as e:
                 errores.append({'fila': index + 2, 'error': str(e)})
@@ -183,6 +279,12 @@ class UsuariosListView(APIView):
         max_page_size = 50
 
     def get(self, request):
+        if getattr(request.user, 'rol', None) != Usuario.ROL_ADMIN:
+            return Response(
+                {'detalle': 'Solo el Administrador Supremo puede gestionar usuarios.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         usuarios = Usuario.objects.select_related('programa').all().order_by('nombres', 'apellidos')
         search = (request.query_params.get('search') or '').strip()
 
@@ -201,62 +303,15 @@ class UsuariosListView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
     def post(self, request):
-        payload = request.data
-
-        nombres = str(payload.get('nombres') or '').strip().upper()
-        apellidos = str(payload.get('apellidos') or '').strip().upper()
-        correo_institucional = str(payload.get('correo_institucional') or '').strip().lower()
-        tipo_documento = str(payload.get('tipo_documento') or '').strip().upper()
-        numero_documento = str(
-            payload.get('numero_documento', payload.get('documento')) or '',
-        ).strip().upper()
-        rol = str(payload.get('rol') or Usuario.ROL_ESTUDIANTE).strip().upper()
-        password = str(payload.get('password') or '').strip() or numero_documento
-
-        if rol not in {Usuario.ROL_ADMIN, Usuario.ROL_ESTUDIANTE}:
+        if getattr(request.user, 'rol', None) != Usuario.ROL_ADMIN:
             return Response(
-                {'rol': [f"Rol invalido. Usa {Usuario.ROL_ADMIN} o {Usuario.ROL_ESTUDIANTE}."]},
-                status=status.HTTP_400_BAD_REQUEST,
+                {'detalle': 'Solo el Administrador Supremo puede gestionar usuarios.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
-        if not all(
-            [
-                nombres,
-                apellidos,
-                correo_institucional,
-                tipo_documento,
-                numero_documento,
-            ],
-        ):
-            return Response(
-                {
-                    'detalle': (
-                        'Los campos nombres, apellidos, correo_institucional, '
-                        'tipo_documento y numero_documento son obligatorios.'
-                    ),
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        usuario = Usuario(
-            nombres=nombres,
-            apellidos=apellidos,
-            correo_institucional=correo_institucional,
-            tipo_documento=tipo_documento,
-            documento=numero_documento,
-            rol=rol,
-            es_primer_ingreso=True,
-            is_active=True,
-        )
-
-        try:
-            usuario.full_clean()
-        except ValidationError as exc:
-            return Response(exc.message_dict, status=status.HTTP_400_BAD_REQUEST)
-
-        usuario.set_password(password)
-        usuario.save()
-
+        serializer = UsuarioCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        usuario = serializer.save(es_primer_ingreso=True, is_active=True)
         serializer = UsuarioListadoSerializer(usuario)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -264,7 +319,7 @@ class UsuariosListView(APIView):
 class ProgramasListView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
-    def get(self, _request):
+    def get(self, request):
         programas = ProgramaAcademico.objects.all().order_by('nombre')
         serializer = ProgramaAcademicoSerializer(programas, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -305,7 +360,37 @@ class UsuariosEstadoUpdateView(APIView):
 
         return None
 
+    @staticmethod
+    def _parse_genero(value):
+        normalized = str(value or '').strip().upper()
+        if not normalized:
+            return None
+        if normalized.startswith('M'):
+            return 'M'
+        if normalized.startswith('F'):
+            return 'F'
+        if normalized.startswith('O'):
+            return 'O'
+        return None
+
+    @staticmethod
+    def _parse_semestre(value):
+        normalized = str(value or '').strip()
+        if not normalized:
+            return None
+        try:
+            semestre = int(float(normalized))
+        except (TypeError, ValueError):
+            return None
+        return semestre if semestre > 0 else None
+
     def patch(self, request, user_id):
+        if getattr(request.user, 'rol', None) != Usuario.ROL_ADMIN:
+            return Response(
+                {'detalle': 'Solo el Administrador Supremo puede gestionar usuarios.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         usuario = get_object_or_404(Usuario, id=user_id)
         payload = request.data
         campos_perfil = {
@@ -316,6 +401,11 @@ class UsuariosEstadoUpdateView(APIView):
             'numero_documento',
             'documento',
             'rol',
+            'is_staff',
+            'programa_id',
+            'programa',
+            'genero',
+            'semestre_actual',
         }
         password_nueva = str(payload.get('password') or '').strip()
         requiere_actualizacion_estado = 'is_active' in payload
@@ -368,17 +458,90 @@ class UsuariosEstadoUpdateView(APIView):
 
             if 'rol' in payload:
                 rol = str(payload.get('rol') or '').strip().upper()
-                if rol not in {Usuario.ROL_ADMIN, Usuario.ROL_ESTUDIANTE}:
+                if rol not in {Usuario.ROL_ADMIN, Usuario.ROL_PROFESOR, Usuario.ROL_ESTUDIANTE}:
                     return Response(
                         {
                             'rol': [
-                                f"Rol invalido. Usa {Usuario.ROL_ADMIN} o {Usuario.ROL_ESTUDIANTE}.",
+                                (
+                                    'Rol invalido. Usa '
+                                    f'{Usuario.ROL_ADMIN}, {Usuario.ROL_PROFESOR} o {Usuario.ROL_ESTUDIANTE}.'
+                                ),
                             ],
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 usuario.rol = rol
                 update_fields.append('rol')
+
+            if 'is_staff' in payload:
+                is_staff = self._parse_bool(payload.get('is_staff'))
+                if is_staff is None:
+                    return Response(
+                        {'is_staff': ["El campo 'is_staff' debe ser booleano."]},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                rol_objetivo = (
+                    str(payload.get('rol') or '').strip().upper() if 'rol' in payload else usuario.rol
+                )
+                if rol_objetivo == Usuario.ROL_PROFESOR:
+                    usuario.is_staff = is_staff
+                elif rol_objetivo == Usuario.ROL_ADMIN:
+                    usuario.is_staff = True
+                else:
+                    usuario.is_staff = False
+                update_fields.append('is_staff')
+
+            if 'programa_id' in payload or 'programa' in payload:
+                programa_id = payload.get('programa_id', payload.get('programa'))
+                if programa_id in (None, ''):
+                    usuario.programa = None
+                else:
+                    try:
+                        programa_id_int = int(programa_id)
+                    except (TypeError, ValueError):
+                        return Response(
+                            {'programa_id': ['Programa invalido.']},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    usuario.programa = get_object_or_404(ProgramaAcademico, id=programa_id_int)
+                update_fields.append('programa')
+
+            if 'genero' in payload:
+                genero = self._parse_genero(payload.get('genero'))
+                valor_genero = str(payload.get('genero') or '').strip()
+                if valor_genero and genero is None:
+                    return Response(
+                        {'genero': ['Genero invalido. Usa M, F u O.']},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                usuario.genero = genero
+                update_fields.append('genero')
+
+            if 'semestre_actual' in payload:
+                semestre = self._parse_semestre(payload.get('semestre_actual'))
+                valor_semestre = str(payload.get('semestre_actual') or '').strip()
+                if valor_semestre and semestre is None:
+                    return Response(
+                        {'semestre_actual': ['Semestre invalido. Debe ser numerico y mayor a 0.']},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                usuario.semestre_actual = semestre
+                update_fields.append('semestre_actual')
+
+            if usuario.rol != Usuario.ROL_ESTUDIANTE:
+                if usuario.semestre_actual is not None:
+                    usuario.semestre_actual = None
+                    update_fields.append('semestre_actual')
+            elif usuario.semestre_actual is None:
+                return Response(
+                    {
+                        'semestre_actual': [
+                            'El semestre actual es obligatorio para usuarios con rol ESTUDIANTE.',
+                        ],
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         if requiere_actualizacion_password:
             try:

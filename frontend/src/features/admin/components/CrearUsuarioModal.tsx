@@ -2,8 +2,9 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { AxiosError } from 'axios'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import usuariosService from '../services/usuariosService'
+import type { Programa } from '../../../types/evaluaciones'
 
 interface CrearUsuarioModalProps {
   isOpen: boolean
@@ -17,7 +18,11 @@ interface FormValues {
   correo_institucional: string
   tipo_documento: string
   numero_documento: string
-  rol: 'ADMIN' | 'ESTUDIANTE'
+  rol: 'ADMIN' | 'PROFESOR' | 'ESTUDIANTE'
+  is_staff: boolean
+  programa_id: string
+  genero: '' | 'M' | 'F' | 'O'
+  semestre_actual: string
   password: string
 }
 
@@ -35,6 +40,10 @@ const initialFormValues: FormValues = {
   tipo_documento: 'CC',
   numero_documento: '',
   rol: 'ESTUDIANTE',
+  is_staff: false,
+  programa_id: '',
+  genero: '',
+  semestre_actual: '',
   password: '',
 }
 
@@ -42,6 +51,12 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues)
   const [errorMessage, setErrorMessage] = useState('')
   const queryClient = useQueryClient()
+
+  const { data: programas = [], isLoading: isProgramasLoading } = useQuery<Programa[]>({
+    queryKey: ['programas'],
+    queryFn: usuariosService.getProgramas,
+    enabled: isOpen,
+  })
 
   const crearUsuarioMutation = useMutation<
     unknown,
@@ -56,6 +71,13 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
         tipo_documento: values.tipo_documento,
         numero_documento: values.numero_documento,
         rol: values.rol,
+        is_staff: values.rol === 'PROFESOR' ? values.is_staff : values.rol === 'ADMIN',
+        programa_id: Number(values.programa_id),
+        genero: values.genero || null,
+        semestre_actual:
+          values.rol === 'ESTUDIANTE' && values.semestre_actual
+            ? Number(values.semestre_actual)
+            : null,
         password: values.password || undefined,
       }),
     onSuccess: () => {
@@ -84,8 +106,20 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
     },
   })
 
-  const handleChange = (field: keyof FormValues, value: string) => {
-    setFormValues((current) => ({ ...current, [field]: value }))
+  const handleChange = (field: Exclude<keyof FormValues, 'is_staff'>, value: string) => {
+    setFormValues((current) => {
+      if (field === 'rol') {
+        const nextRole = value as FormValues['rol']
+        return {
+          ...current,
+          rol: nextRole,
+          is_staff: nextRole === 'PROFESOR' ? current.is_staff : nextRole === 'ADMIN',
+          semestre_actual: nextRole === 'ESTUDIANTE' ? current.semestre_actual : '',
+        }
+      }
+
+      return { ...current, [field]: value }
+    })
   }
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -99,6 +133,10 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
       tipo_documento: formValues.tipo_documento.trim().toUpperCase(),
       numero_documento: formValues.numero_documento.trim().toUpperCase(),
       rol: formValues.rol,
+      is_staff: formValues.rol === 'PROFESOR' ? formValues.is_staff : formValues.rol === 'ADMIN',
+      programa_id: formValues.programa_id,
+      genero: formValues.genero,
+      semestre_actual: formValues.semestre_actual,
       password: formValues.password.trim(),
     }
 
@@ -107,10 +145,24 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
       !payload.apellidos ||
       !payload.correo_institucional ||
       !payload.tipo_documento ||
-      !payload.numero_documento
+      !payload.numero_documento ||
+      !formValues.programa_id
     ) {
-      setErrorMessage('Completa todos los campos obligatorios.')
+      setErrorMessage('Completa todos los campos obligatorios, incluyendo el programa.')
       return
+    }
+
+    if (formValues.semestre_actual && Number(formValues.semestre_actual) <= 0) {
+      setErrorMessage('El semestre debe ser mayor a 0.')
+      return
+    }
+
+    if (formValues.rol === 'ESTUDIANTE') {
+      const semestre = Number(formValues.semestre_actual)
+      if (!formValues.semestre_actual || Number.isNaN(semestre) || semestre < 1 || semestre > 10) {
+        setErrorMessage('Para estudiantes, el semestre actual es obligatorio y debe estar entre 1 y 10.')
+        return
+      }
     }
 
     crearUsuarioMutation.mutate(payload)
@@ -209,9 +261,75 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
                 required
               >
                 <option value="ESTUDIANTE">Estudiante</option>
+                <option value="PROFESOR">Profesor</option>
                 <option value="ADMIN">Administrador</option>
               </select>
             </label>
+
+            {formValues.rol === 'PROFESOR' && (
+              <label className="col-span-1 sm:col-span-2 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="is_staff_crear"
+                  checked={formValues.is_staff}
+                  onChange={(event) =>
+                    setFormValues((current) => ({ ...current, is_staff: event.target.checked }))
+                  }
+                  className="h-4 w-4 rounded border-gray-300 text-usco-vino focus:ring-usco-vino"
+                />
+                <span className="text-sm text-gray-900">Otorgar acceso administrativo (Staff)</span>
+              </label>
+            )}
+
+            <label className="col-span-1">
+              <span className="mb-1 block text-sm font-semibold text-usco-gris">Programa</span>
+              <select
+                value={formValues.programa_id}
+                onChange={(event) => handleChange('programa_id', event.target.value)}
+                className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
+                required
+                disabled={isProgramasLoading}
+              >
+                <option value="" disabled>
+                  {isProgramasLoading ? 'Cargando programas...' : 'Selecciona un programa'}
+                </option>
+                {programas.map((programa) => (
+                  <option key={programa.id} value={programa.id}>
+                    {programa.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="col-span-1">
+              <span className="mb-1 block text-sm font-semibold text-usco-gris">Genero</span>
+              <select
+                value={formValues.genero}
+                onChange={(event) => handleChange('genero', event.target.value)}
+                className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
+              >
+                <option value="">No especificado</option>
+                <option value="M">Masculino</option>
+                <option value="F">Femenino</option>
+                <option value="O">Otro</option>
+              </select>
+            </label>
+
+            {formValues.rol === 'ESTUDIANTE' && (
+              <label className="col-span-1 sm:col-span-2">
+                <span className="mb-1 block text-sm font-semibold text-usco-gris">Semestre Actual</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={formValues.semestre_actual}
+                  onChange={(event) => handleChange('semestre_actual', event.target.value)}
+                  className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
+                  placeholder="Ejemplo: 1 - 10"
+                  required
+                />
+              </label>
+            )}
 
             <label className="col-span-1">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">

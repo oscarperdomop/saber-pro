@@ -30,10 +30,25 @@ const AppRouter = () => {
         <Route element={<ProtectedRoute />}>
           <Route path="/activar-cuenta" element={<ActivarCuentaPage />} />
 
-          <Route element={<RoleRoute allowedRoles={['ADMIN']} />}>
-            <Route element={<MainLayout />}>
+          <Route element={<RoleRoute allowedRoles={['ESTUDIANTE']} />}>
+            <Route
+              path="/evaluaciones/intento/:intentoId/modulo/:moduloId"
+              element={<PresentarExamenPage />}
+            />
+          </Route>
+
+          <Route element={<MainLayout />}>
+            <Route path="/perfil" element={<MiPerfilPage />} />
+
+            <Route
+              element={
+                <RoleRoute
+                  allowedRoles={['ADMIN', 'PROFESOR']}
+                  requireStaffForRoles={['PROFESOR']}
+                />
+              }
+            >
               <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/perfil" element={<MiPerfilPage />} />
               <Route path="/preguntas" element={<BancoPreguntasPage />} />
               <Route path="/preguntas/nueva" element={<CrearPreguntaPage />} />
               <Route path="/preguntas/:preguntaId/editar" element={<EditarPreguntaPage />} />
@@ -43,18 +58,21 @@ const AppRouter = () => {
               <Route path="/simulacros/nuevo" element={<CrearSimulacroPage />} />
               <Route path="/simulacros/editar/:id" element={<EditarSimulacroPage />} />
               <Route path="/simulacros/:id/resultados" element={<ResultadosSimulacroPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={['ADMIN']} />}>
               <Route path="/usuarios" element={<UsuariosPage />} />
             </Route>
-          </Route>
 
-          <Route element={<RoleRoute allowedRoles={['ESTUDIANTE']} />}>
             <Route
-              path="/evaluaciones/intento/:intentoId/modulo/:moduloId"
-              element={<PresentarExamenPage />}
-            />
-            <Route element={<MainLayout />}>
+              element={
+                <RoleRoute
+                  allowedRoles={['ESTUDIANTE', 'PROFESOR']}
+                  denyStaffForRoles={['PROFESOR']}
+                />
+              }
+            >
               <Route path="/estudiante/dashboard" element={<DashboardPage />} />
-              <Route path="/perfil" element={<MiPerfilPage />} />
               <Route path="/evaluaciones" element={<EvaluacionesPage />} />
               <Route path="/evaluaciones/intento/:intentoId" element={<ModulosIntentoPage />} />
               <Route

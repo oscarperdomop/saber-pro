@@ -27,14 +27,27 @@ export const getStoredToken = (): string | null => {
 }
 
 export const resolveUserRole = (user: User | null): UserRole => {
-  if (user?.rol === 'ADMIN' || user?.rol === 'ESTUDIANTE') {
+  if (user?.rol === 'ADMIN' || user?.rol === 'PROFESOR' || user?.rol === 'ESTUDIANTE') {
     return user.rol
   }
   return user?.is_staff ? 'ADMIN' : 'ESTUDIANTE'
 }
 
-export const resolveDefaultRoute = (role: UserRole): string => {
-  return role === 'ADMIN' ? '/dashboard' : '/estudiante/dashboard'
+export const hasAdminAccess = (user: User | null): boolean => {
+  const role = resolveUserRole(user)
+  return role === 'ADMIN' || (role === 'PROFESOR' && Boolean(user?.is_staff))
+}
+
+export const resolveDefaultRoute = (role: UserRole, user?: User | null): string => {
+  if (role === 'ADMIN') {
+    return '/dashboard'
+  }
+
+  if (role === 'PROFESOR') {
+    return user?.is_staff ? '/dashboard' : '/estudiante/dashboard'
+  }
+
+  return '/estudiante/dashboard'
 }
 
 export const useAuthStore = () => {

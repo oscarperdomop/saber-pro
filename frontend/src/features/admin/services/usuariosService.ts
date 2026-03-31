@@ -2,6 +2,20 @@ import axiosInstance from '../../../lib/axios'
 import type { Programa } from '../../../types/evaluaciones'
 import type { Usuario, UsuariosPaginadosResponse } from '../../../types/usuarios'
 
+export interface CrearUsuarioPayload {
+  nombres: string
+  apellidos: string
+  correo_institucional: string
+  tipo_documento: string
+  numero_documento: string
+  rol: 'ADMIN' | 'PROFESOR' | 'ESTUDIANTE'
+  is_staff?: boolean
+  programa_id: number
+  genero?: 'M' | 'F' | 'O' | null
+  semestre_actual?: number | null
+  password?: string
+}
+
 export const getUsuarios = async (
   page = 1,
   pageSize = 10,
@@ -14,12 +28,7 @@ export const getUsuarios = async (
   return data
 }
 
-export const crearUsuario = async (
-  data: Pick<
-    Usuario,
-    'nombres' | 'apellidos' | 'correo_institucional' | 'tipo_documento' | 'numero_documento' | 'rol'
-  > & { password?: string },
-): Promise<Usuario> => {
+export const crearUsuario = async (data: CrearUsuarioPayload): Promise<Usuario> => {
   const response = await axiosInstance.post<Usuario>('/auth/usuarios/', data)
   return response.data
 }
@@ -61,7 +70,13 @@ export const editarUsuario = async ({
   data,
 }: {
   id: string | number
-  data: Partial<Usuario> & { password?: string; documento?: string }
+  data: Partial<Usuario> & {
+    password?: string
+    documento?: string
+    programa_id?: number | null
+    genero?: 'M' | 'F' | 'O' | null
+    semestre_actual?: number | null
+  }
 }) => {
   const response = await axiosInstance.patch(`/usuarios/${id}/`, data)
   return response.data

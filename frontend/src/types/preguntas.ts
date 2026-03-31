@@ -15,6 +15,9 @@ export interface Pregunta {
   id: string | number
   enunciado: string
   contexto_texto?: string | null
+  imagen_grafica?: File | string | null
+  codigo_latex?: string | null
+  soporte_multimedia?: 'NINGUNO' | 'IMAGEN' | 'LATEX' | string
   tipo_pregunta: 'Opcion Multiple' | 'Ensayo' | string
   dificultad: 'Facil' | 'Media' | 'Alta' | 'Medio' | 'Dificil' | string
   estado?: 'Borrador' | 'Publicada' | 'Archivada' | string
@@ -40,6 +43,9 @@ export interface PreguntasPaginadasResponse {
 export interface PreguntaPayload {
   enunciado: string
   contexto_texto?: string
+  imagen_grafica?: File | string | null
+  codigo_latex?: string | null
+  soporte_multimedia?: 'NINGUNO' | 'IMAGEN' | 'LATEX' | string
   tipo_pregunta: string
   dificultad: string
   estado?: 'Borrador' | 'Publicada' | 'Archivada' | string

@@ -1,5 +1,6 @@
 import type { AxiosError } from 'axios'
 import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
 import {
   AlertTriangle,
   BarChart3,
@@ -11,7 +12,13 @@ import {
 } from 'lucide-react'
 import adminService from '../../admin/services/adminService'
 import SaberProLoader from '../../../components/ui/SaberProLoader'
-import type { AnaliticasResponse, ParticipacionPrograma, PreguntaCritica } from '../../../types/admin'
+import type {
+  AnaliticasResponse,
+  ParticipacionPrograma,
+  PreguntaCritica,
+  ReporteBucket,
+  ReportesResumenResponse,
+} from '../../../types/admin'
 
 interface ApiErrorResponse {
   detail?: string
@@ -25,6 +32,11 @@ const calculateErrorRate = (pregunta: PreguntaCritica): number => {
 }
 
 const AdminDashboard = () => {
+  const [programaFiltro, setProgramaFiltro] = useState<number | ''>('')
+  const [dimensionActiva, setDimensionActiva] = useState<
+    'dificultad' | 'competencia' | 'categoria' | 'genero' | 'semestre'
+  >('dificultad')
+
   const {
     data,
     isLoading,
@@ -34,6 +46,40 @@ const AdminDashboard = () => {
     queryKey: ['kpisGlobales'],
     queryFn: adminService.getKpisGlobales,
   })
+
+  const { data: cobertura } = useQuery({
+    queryKey: ['coberturaPrograma'],
+    queryFn: adminService.getCoberturaPrograma,
+  })
+
+  const { data: reportes } = useQuery<ReportesResumenResponse, AxiosError<ApiErrorResponse>>({
+    queryKey: ['reportesResumen', programaFiltro],
+    queryFn: () =>
+      adminService.getReportesResumen(
+        typeof programaFiltro === 'number' ? programaFiltro : undefined,
+      ),
+  })
+
+  const rowsByDimension = useMemo<ReporteBucket[]>(() => {
+    if (!reportes) {
+      return []
+    }
+
+    if (dimensionActiva === 'dificultad') {
+      return reportes.promedio_por_dificultad
+    }
+    if (dimensionActiva === 'competencia') {
+      return reportes.promedio_por_competencia
+    }
+    if (dimensionActiva === 'categoria') {
+      return reportes.promedio_por_categoria
+    }
+    if (dimensionActiva === 'genero') {
+      return reportes.desempeno_por_genero
+    }
+
+    return reportes.desempeno_por_semestre
+  }, [dimensionActiva, reportes])
 
   if (isLoading) {
     return (
@@ -61,6 +107,7 @@ const AdminDashboard = () => {
 
   const programas = data.participacion_por_programa
   const preguntasCriticas = data.top_preguntas_criticas
+  const coberturaProgramas = cobertura?.results ?? []
 
   const totalProgramas = programas.length
   const totalParticipantes = programas.reduce((acc, programa) => acc + programa.total, 0)
@@ -75,6 +122,8 @@ const AdminDashboard = () => {
           ).toFixed(1),
         )
       : 0
+
+  const maxPromedio = Math.max(...rowsByDimension.map((row) => row.promedio), 1)
 
   return (
     <section className="mx-auto w-full max-w-7xl space-y-6">
@@ -254,6 +303,121 @@ const AdminDashboard = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        </article>
+      </section>
+
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+        <article className="rounded-2xl border border-usco-ocre/80 bg-white p-6 shadow-sm xl:col-span-2">
+          <h2 className="text-lg font-bold text-usco-vino">Cobertura Relativa por Programa</h2>
+          <p className="mt-1 text-sm text-usco-gris">
+            Estudiantes con al menos un intento finalizado sobre estudiantes activos del programa.
+          </p>
+
+          <ul className="mt-5 space-y-3">
+            {coberturaProgramas.length === 0 && (
+              <li className="rounded-xl border border-usco-ocre/70 bg-usco-fondo p-4 text-sm text-usco-gris">
+                Sin datos de cobertura por ahora.
+              </li>
+            )}
+
+            {coberturaProgramas.map((item) => (
+              <li
+                key={item.programa_id}
+                className="rounded-xl border border-usco-ocre/70 bg-usco-fondo/40 p-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-usco-gris">{item.programa_nombre}</p>
+                  <span className="rounded-full bg-usco-vino px-3 py-1 text-xs font-bold text-white">
+                    {item.cobertura_porcentaje}%
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-usco-gris/80">
+                  {item.estudiantes_con_intento_finalizado} / {item.total_estudiantes_activos}{' '}
+                  estudiantes
+                </p>
+              </li>
+            ))}
+          </ul>
+        </article>
+
+        <article className="rounded-2xl border border-usco-ocre/80 bg-white p-6 shadow-sm xl:col-span-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-usco-vino">Panel de Resultados Granulares</h2>
+              <p className="mt-1 text-sm text-usco-gris">
+                Promedios por dificultad, competencia, categoria, genero y semestre.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={programaFiltro}
+                onChange={(event) =>
+                  setProgramaFiltro(event.target.value ? Number(event.target.value) : '')
+                }
+                className="rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none focus:border-usco-vino"
+              >
+                <option value="">Todos los programas</option>
+                {coberturaProgramas.map((item) => (
+                  <option key={item.programa_id} value={item.programa_id}>
+                    {item.programa_nombre}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={dimensionActiva}
+                onChange={(event) =>
+                  setDimensionActiva(
+                    event.target.value as
+                      | 'dificultad'
+                      | 'competencia'
+                      | 'categoria'
+                      | 'genero'
+                      | 'semestre',
+                  )
+                }
+                className="rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none focus:border-usco-vino"
+              >
+                <option value="dificultad">Promedio por Dificultad</option>
+                <option value="competencia">Promedio por Competencia</option>
+                <option value="categoria">Promedio por Categoria</option>
+                <option value="genero">Desempeno por Genero</option>
+                <option value="semestre">Desempeno por Semestre</option>
+              </select>
+            </div>
+          </div>
+
+          <p className="mt-3 text-sm text-usco-gris">
+            Promedio general de la prueba:{' '}
+            <span className="font-bold text-usco-vino">{reportes?.promedio_general_prueba ?? 0}</span>
+          </p>
+
+          <div className="mt-4 space-y-3">
+            {rowsByDimension.length === 0 && (
+              <div className="rounded-xl border border-usco-ocre/70 bg-usco-fondo p-4 text-sm text-usco-gris">
+                No hay datos para los filtros seleccionados.
+              </div>
+            )}
+
+            {rowsByDimension.map((row, index) => {
+              const width = `${Math.max((row.promedio / maxPromedio) * 100, 2)}%`
+              return (
+                <div
+                  key={`${row.label}-${index}`}
+                  className="rounded-xl border border-usco-ocre/70 bg-usco-fondo/35 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-usco-gris">{String(row.label)}</span>
+                    <span className="text-sm font-bold text-usco-vino">{row.promedio}</span>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-usco-ocre/40">
+                    <div className="h-full rounded-full bg-usco-vino" style={{ width }} />
+                  </div>
+                  <p className="mt-1 text-xs text-usco-gris/80">{row.total} respuesta(s)</p>
+                </div>
+              )
+            })}
           </div>
         </article>
       </section>

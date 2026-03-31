@@ -3,6 +3,7 @@ import type { AxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import SaberProLoader from '../../../components/ui/SaberProLoader'
+import RichTextRenderer from '../../../components/ui/RichTextRenderer'
 import estudianteService from '../services/estudianteService'
 import type { RespuestaEstudiante } from '../../../types/evaluaciones'
 
@@ -66,6 +67,10 @@ const PresentarExamenPage = () => {
   const [showRecoveredMessage, setShowRecoveredMessage] = useState(false)
   const opcionesPorRespuestaRef = useRef<Record<string, string[]>>({})
   const storageKey = intentoId ? `simulacro_estado_${intentoId}` : ''
+
+  useEffect(() => {
+    setPreguntaActivaIndex(0)
+  }, [intentoId, moduloId])
 
   useEffect(() => {
     if (!storageKey) {
@@ -329,7 +334,7 @@ const PresentarExamenPage = () => {
               <article className="space-y-6 rounded-xl bg-white p-6 shadow-sm">
                 {respuestaActiva.pregunta.contexto_texto && (
                   <div className="rounded-lg border-l-4 border-usco-gris bg-gray-50 p-4 text-sm text-usco-gris">
-                    {respuestaActiva.pregunta.contexto_texto}
+                    <RichTextRenderer content={respuestaActiva.pregunta.contexto_texto} />
                   </div>
                 )}
 
@@ -341,7 +346,35 @@ const PresentarExamenPage = () => {
                   />
                 )}
 
-                <h3 className="text-2xl font-bold text-usco-vino">{respuestaActiva.pregunta.enunciado}</h3>
+                {(respuestaActiva.pregunta.soporte_multimedia === 'IMAGEN' ||
+                  (!respuestaActiva.pregunta.soporte_multimedia &&
+                    Boolean(respuestaActiva.pregunta.imagen_grafica))) &&
+                  respuestaActiva.pregunta.imagen_grafica && (
+                    <img
+                      src={resolveMediaUrl(respuestaActiva.pregunta.imagen_grafica) ?? undefined}
+                      alt="Grafica de la pregunta"
+                      className="max-h-80 w-full rounded-lg border border-usco-ocre/80 bg-white object-contain p-2"
+                    />
+                  )}
+
+                {(respuestaActiva.pregunta.soporte_multimedia === 'LATEX' ||
+                  (!respuestaActiva.pregunta.soporte_multimedia &&
+                    Boolean(respuestaActiva.pregunta.codigo_latex))) &&
+                  respuestaActiva.pregunta.codigo_latex && (
+                    <div className="rounded-lg border border-usco-ocre/80 bg-usco-fondo p-4">
+                      <RichTextRenderer
+                        content={respuestaActiva.pregunta.codigo_latex}
+                        className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                      />
+                    </div>
+                  )}
+
+                <div className="mb-6 text-lg font-medium text-gray-800">
+                  <RichTextRenderer
+                    content={respuestaActiva.pregunta.enunciado}
+                    className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                  />
+                </div>
 
                 <div className="space-y-3">
                   {respuestaActiva.pregunta.opciones.map((opcion, index) => {
@@ -375,7 +408,10 @@ const PresentarExamenPage = () => {
                             }`}
                           />
                           <div className="flex-1">
-                            <p className="text-sm font-medium">{opcion.texto}</p>
+                            <RichTextRenderer
+                              content={opcion.texto}
+                              className="text-sm font-medium [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                            />
                             {opcion.imagen && (
                               <img
                                 src={resolveMediaUrl(opcion.imagen) ?? undefined}

@@ -18,7 +18,7 @@ from django.contrib import admin
 from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path
-from evaluaciones.views import AnaliticasAdminViewSet
+from evaluaciones.views import AnaliticasAdminViewSet, PreguntaAdminViewSet, ReportesViewSet
 from users.views import CargaMasivaUsuariosView, UsuariosEstadoUpdateView
 
 urlpatterns = [
@@ -28,6 +28,21 @@ urlpatterns = [
         'api/admin/analiticas/kpis_globales/',
         AnaliticasAdminViewSet.as_view({'get': 'kpis_globales'}),
         name='admin-kpis-globales',
+    ),
+    path(
+        'api/admin/analiticas/cobertura_programa/',
+        AnaliticasAdminViewSet.as_view({'get': 'cobertura_programa'}),
+        name='admin-cobertura-programa',
+    ),
+    path(
+        'api/admin/reportes/resumen/',
+        ReportesViewSet.as_view({'get': 'resumen'}),
+        name='admin-reportes-resumen',
+    ),
+    path(
+        'api/preguntas/criticas/',
+        PreguntaAdminViewSet.as_view({'get': 'criticas'}),
+        name='preguntas-criticas',
     ),
     path(
         'api/usuarios/<uuid:user_id>/',

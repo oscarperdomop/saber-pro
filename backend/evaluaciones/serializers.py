@@ -87,6 +87,9 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
             'tipo_pregunta',
             'contexto_texto',
             'contexto_imagen',
+            'imagen_grafica',
+            'codigo_latex',
+            'soporte_multimedia',
             'enunciado',
             'justificacion',
             'limite_palabras',
@@ -115,6 +118,21 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
         competencia = (
             attrs.get('competencia') if 'competencia' in attrs else getattr(self.instance, 'competencia', None)
         )
+        soporte_multimedia = (
+            attrs.get('soporte_multimedia')
+            if 'soporte_multimedia' in attrs
+            else getattr(self.instance, 'soporte_multimedia', 'NINGUNO')
+        )
+        imagen_grafica = (
+            attrs.get('imagen_grafica')
+            if 'imagen_grafica' in attrs
+            else getattr(self.instance, 'imagen_grafica', None)
+        )
+        codigo_latex = (
+            attrs.get('codigo_latex')
+            if 'codigo_latex' in attrs
+            else getattr(self.instance, 'codigo_latex', None)
+        )
 
         errors = {}
 
@@ -133,6 +151,15 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
 
         if competencia.modulo_id != modulo.id:
             errors['competencia'] = ['La competencia seleccionada no pertenece al modulo elegido.']
+
+        if soporte_multimedia not in {'NINGUNO', 'IMAGEN', 'LATEX'}:
+            errors['soporte_multimedia'] = ['Selecciona un soporte multimedia valido.']
+
+        if soporte_multimedia == 'IMAGEN' and not imagen_grafica:
+            errors['imagen_grafica'] = ['Debes adjuntar una imagen cuando el soporte es IMAGEN.']
+
+        if soporte_multimedia == 'LATEX' and not str(codigo_latex or '').strip():
+            errors['codigo_latex'] = ['Debes escribir codigo LaTeX cuando el soporte es LATEX.']
 
         if errors:
             raise serializers.ValidationError(errors)
@@ -164,6 +191,15 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
                         {'opciones': ['Debes marcar al menos una opcion correcta.']}
                     )
 
+        soporte_multimedia = str(validated_data.get('soporte_multimedia') or 'NINGUNO')
+        if soporte_multimedia == 'NINGUNO':
+            validated_data['imagen_grafica'] = None
+            validated_data['codigo_latex'] = None
+        elif soporte_multimedia == 'IMAGEN':
+            validated_data['codigo_latex'] = None
+        elif soporte_multimedia == 'LATEX':
+            validated_data['imagen_grafica'] = None
+
         pregunta = Pregunta.objects.create(**validated_data)
 
         for opcion in opciones_data:
@@ -182,6 +218,15 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+
+        soporte_multimedia = str(getattr(instance, 'soporte_multimedia', 'NINGUNO') or 'NINGUNO')
+        if soporte_multimedia == 'NINGUNO':
+            instance.imagen_grafica = None
+            instance.codigo_latex = None
+        elif soporte_multimedia == 'IMAGEN':
+            instance.codigo_latex = None
+        elif soporte_multimedia == 'LATEX':
+            instance.imagen_grafica = None
 
         if tipo_pregunta == 'Ensayo':
             if instance.limite_palabras in [None, '']:
@@ -232,9 +277,97 @@ class PlantillaExamenAdminSerializer(serializers.ModelSerializer):
             return obj.intentos.exists()
         return IntentoExamen.objects.filter(plantilla_examen=obj).exists()
 
+    @staticmethod
+    def _describe_nivel(nivel):
+        return {
+            'Facil': 'Facil',
+            'Medio': 'Medio',
+            'Dificil': 'Dificil',
+            'Balanceada': 'Balanceada',
+        }.get(str(nivel or '').strip(), 'Balanceada')
+
+    @staticmethod
+    def _count_preguntas_publicadas(modulo, categoria, nivel_dificultad):
+        preguntas_qs = Pregunta.objects.filter(modulo=modulo, estado='Publicada')
+
+        if categoria:
+            preguntas_qs = preguntas_qs.filter(categoria=categoria)
+
+        if nivel_dificultad and nivel_dificultad != 'Balanceada':
+            preguntas_qs = preguntas_qs.filter(nivel_dificultad=nivel_dificultad)
+
+        return preguntas_qs.count()
+
+    def _validate_reglas_disponibles(self, reglas_data):
+        if not reglas_data:
+            return
+
+        reglas_agrupadas = {}
+
+        for index, regla in enumerate(reglas_data, start=1):
+            modulo = regla.get('modulo')
+            categoria = regla.get('categoria')
+            nivel_dificultad = str(regla.get('nivel_dificultad') or 'Balanceada').strip() or 'Balanceada'
+            cantidad_preguntas = int(regla.get('cantidad_preguntas') or 0)
+
+            if cantidad_preguntas <= 0:
+                continue
+
+            if modulo is None:
+                raise serializers.ValidationError({'detail': f'La regla #{index} no tiene modulo valido.'})
+
+            key = (modulo.id, categoria.id if categoria else None, nivel_dificultad)
+            if key not in reglas_agrupadas:
+                reglas_agrupadas[key] = {
+                    'modulo': modulo,
+                    'categoria': categoria,
+                    'nivel_dificultad': nivel_dificultad,
+                    'cantidad_solicitada': 0,
+                    'indices': [],
+                }
+
+            reglas_agrupadas[key]['cantidad_solicitada'] += cantidad_preguntas
+            reglas_agrupadas[key]['indices'].append(index)
+
+        errores = []
+        for datos in reglas_agrupadas.values():
+            disponibles = self._count_preguntas_publicadas(
+                modulo=datos['modulo'],
+                categoria=datos['categoria'],
+                nivel_dificultad=datos['nivel_dificultad'],
+            )
+            solicitadas = datos['cantidad_solicitada']
+
+            if solicitadas <= disponibles:
+                continue
+
+            modulo_nombre = str(getattr(datos['modulo'], 'nombre', '') or '').strip() or 'Sin modulo'
+            categoria_nombre = (
+                str(getattr(datos['categoria'], 'nombre', '') or '').strip()
+                if datos['categoria']
+                else None
+            )
+            dificultad = self._describe_nivel(datos['nivel_dificultad'])
+            reglas_ref = ', '.join(f'#{indice}' for indice in datos['indices'])
+
+            detalle = (
+                f'Regla(s) {reglas_ref} para modulo "{modulo_nombre}" '
+                f'(dificultad: {dificultad}'
+            )
+            if categoria_nombre:
+                detalle += f', categoria: {categoria_nombre}'
+            detalle += f') solicita(n) {solicitadas} pregunta(s), pero solo hay {disponibles} publicada(s).'
+
+            errores.append(detalle)
+
+        if errores:
+            raise serializers.ValidationError({'detail': ' | '.join(errores)})
+
     def create(self, validated_data):
         reglas_data = validated_data.pop('reglas', [])
         programas_data = validated_data.pop('programas_destino', [])
+
+        self._validate_reglas_disponibles(reglas_data)
 
         plantilla = PlantillaExamen.objects.create(**validated_data)
         plantilla.programas_destino.set(programas_data)
@@ -247,6 +380,9 @@ class PlantillaExamenAdminSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         reglas_data = validated_data.pop('reglas', None)
         programas_data = validated_data.pop('programas_destino', None)
+
+        if reglas_data is not None:
+            self._validate_reglas_disponibles(reglas_data)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -338,6 +474,9 @@ class PreguntaEstudianteSerializer(serializers.ModelSerializer):
             'enunciado',
             'contexto_texto',
             'contexto_imagen',
+            'imagen_grafica',
+            'codigo_latex',
+            'soporte_multimedia',
             'limite_palabras',
             'opciones',
         ]

@@ -25,6 +25,33 @@ export interface ActualizarPreguntaResult {
   status: number
 }
 
+export interface CargaMasivaPreguntasResponse {
+  status: string
+  preguntas_creadas: number
+  filas_con_ia: number
+  filas_omitidas?: number
+  lote_id?: string
+  errores: Array<{ fila: number; error: string }>
+}
+
+export interface RevertirCargaMasivaResponse {
+  status: string
+  cantidad_eliminada: number
+  mensaje: string
+}
+
+export interface PreguntaCriticaRow extends Pregunta {
+  tasa_error: number
+  total_respondidas: number
+  respuestas_incorrectas: number
+}
+
+export interface PreguntasCriticasResponse {
+  umbral: number
+  total: number
+  results: PreguntaCriticaRow[]
+}
+
 const getDificultad = (pregunta: Pregunta): string => {
   const base = pregunta.dificultad || pregunta.nivel_dificultad || ''
 
@@ -62,6 +89,10 @@ const normalizePregunta = (pregunta: Pregunta): Pregunta => {
 
   return {
     ...pregunta,
+    soporte_multimedia:
+      (pregunta.soporte_multimedia as 'NINGUNO' | 'IMAGEN' | 'LATEX' | undefined) ?? 'NINGUNO',
+    codigo_latex: pregunta.codigo_latex ?? null,
+    imagen_grafica: pregunta.imagen_grafica ?? null,
     categoria_id:
       pregunta.categoria_id ??
       (typeof pregunta.categoria === 'number' ? pregunta.categoria : null),
@@ -207,6 +238,95 @@ export const generarOpcionesIA = async ({
   }))
 }
 
+export const cargaMasivaPreguntas = async ({
+  file,
+  moduloId,
+  categoriaId,
+  competenciaId,
+}: {
+  file: File
+  moduloId?: number
+  categoriaId?: number
+  competenciaId?: number
+}): Promise<CargaMasivaPreguntasResponse> => {
+  const formData = new FormData()
+  formData.append('archivo', file)
+  if (typeof moduloId === 'number') {
+    formData.append('modulo_id', String(moduloId))
+  }
+
+  if (categoriaId) {
+    formData.append('categoria_id', String(categoriaId))
+  }
+
+  if (competenciaId) {
+    formData.append('competencia_id', String(competenciaId))
+  }
+
+  const { data } = await axiosInstance.post<CargaMasivaPreguntasResponse>(
+    '/evaluaciones/admin/preguntas/carga-masiva/',
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  )
+
+  return data
+}
+
+export const descargarPlantillaCargaMasivaPreguntas = async (): Promise<Blob> => {
+  const { data } = await axiosInstance.get('/evaluaciones/admin/preguntas/plantilla-carga/', {
+    responseType: 'blob',
+  })
+  return data as Blob
+}
+
+export const revertirCargaMasiva = async (
+  loteId: string,
+): Promise<RevertirCargaMasivaResponse> => {
+  const { data } = await axiosInstance.post<RevertirCargaMasivaResponse>(
+    '/evaluaciones/admin/preguntas/revertir-carga/',
+    { lote_id: loteId },
+  )
+
+  return data
+}
+
+export const getPreguntasCriticas = async ({
+  umbral = 60,
+  programaId,
+  nivel,
+  search,
+}: {
+  umbral?: number
+  programaId?: number | ''
+  nivel?: string
+  search?: string
+}): Promise<PreguntasCriticasResponse> => {
+  const params = new URLSearchParams()
+  params.set('umbral', String(umbral))
+  if (typeof programaId === 'number') {
+    params.set('programa_id', String(programaId))
+  }
+  if (nivel) {
+    params.set('nivel', nivel)
+  }
+  if (search) {
+    params.set('search', search)
+  }
+
+  const { data } = await axiosInstance.get<PreguntasCriticasResponse>(
+    `/preguntas/criticas/?${params.toString()}`,
+  )
+  return {
+    ...data,
+    results: (data.results ?? []).map(normalizePregunta).map((pregunta) => ({
+      ...pregunta,
+      tasa_error: Number((pregunta as PreguntaCriticaRow).tasa_error ?? 0),
+      total_respondidas: Number((pregunta as PreguntaCriticaRow).total_respondidas ?? 0),
+      respuestas_incorrectas: Number((pregunta as PreguntaCriticaRow).respuestas_incorrectas ?? 0),
+    })),
+  }
+}
+
 const preguntasService = {
   getPreguntas,
   getPreguntaById,
@@ -215,6 +335,10 @@ const preguntasService = {
   actualizarPregunta,
   cambiarEstadoPregunta,
   generarOpcionesIA,
+  cargaMasivaPreguntas,
+  descargarPlantillaCargaMasivaPreguntas,
+  revertirCargaMasiva,
+  getPreguntasCriticas,
 }
 
 export default preguntasService

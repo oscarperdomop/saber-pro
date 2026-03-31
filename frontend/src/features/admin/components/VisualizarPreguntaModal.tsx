@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { CheckCircle2, X } from 'lucide-react'
 import type { Pregunta } from '../../../types/preguntas'
+import RichTextRenderer from '../../../components/ui/RichTextRenderer'
 
 interface VisualizarPreguntaModalProps {
   isOpen: boolean
@@ -66,10 +67,15 @@ const VisualizarPreguntaModal = ({ isOpen, onClose, pregunta }: VisualizarPregun
   }
 
   const preguntaImagen = resolveMediaUrl(
-    ((pregunta as unknown as { imagen?: string | null }).imagen ??
+    (typeof pregunta.imagen_grafica === 'string' ? pregunta.imagen_grafica : null) ??
+      ((pregunta as unknown as { imagen?: string | null }).imagen ??
       (pregunta as unknown as { contexto_imagen?: string | null }).contexto_imagen) ??
       null,
   )
+  const mostrarImagenPregunta =
+    pregunta.soporte_multimedia === 'IMAGEN' || Boolean(preguntaImagen)
+  const mostrarLatexPregunta =
+    pregunta.soporte_multimedia === 'LATEX' || Boolean((pregunta.codigo_latex ?? '').trim())
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
@@ -111,17 +117,23 @@ const VisualizarPreguntaModal = ({ isOpen, onClose, pregunta }: VisualizarPregun
         <div className="max-h-[75vh] overflow-y-auto px-5 py-4">
           <section className="rounded-xl border border-usco-ocre/70 bg-usco-fondo/40 p-4">
             <h3 className="text-sm font-bold uppercase tracking-wide text-usco-gris">Enunciado</h3>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-usco-gris">{pregunta.enunciado}</p>
+            <RichTextRenderer
+              content={pregunta.enunciado}
+              className="mt-2 text-sm text-usco-gris [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+            />
           </section>
 
           {pregunta.contexto_texto && (
             <section className="mt-4 rounded-xl border border-usco-ocre/70 bg-white p-4">
               <h3 className="text-sm font-bold uppercase tracking-wide text-usco-gris">Contexto</h3>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-usco-gris">{pregunta.contexto_texto}</p>
+              <RichTextRenderer
+                content={pregunta.contexto_texto}
+                className="mt-2 text-sm text-usco-gris [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+              />
             </section>
           )}
 
-          {preguntaImagen && (
+          {mostrarImagenPregunta && preguntaImagen && (
             <section className="mt-4 rounded-xl border border-usco-ocre/70 bg-white p-4">
               <h3 className="text-sm font-bold uppercase tracking-wide text-usco-gris">
                 Imagen de la Pregunta
@@ -133,6 +145,18 @@ const VisualizarPreguntaModal = ({ isOpen, onClose, pregunta }: VisualizarPregun
                   className="max-h-64 w-auto rounded-lg object-contain"
                 />
               </div>
+            </section>
+          )}
+
+          {mostrarLatexPregunta && (pregunta.codigo_latex ?? '').trim() && (
+            <section className="mt-4 rounded-xl border border-usco-ocre/70 bg-white p-4">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-usco-gris">
+                Formula / Codigo LaTeX
+              </h3>
+              <RichTextRenderer
+                content={(pregunta.codigo_latex ?? '').trim()}
+                className="mt-2 text-sm text-usco-gris [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+              />
             </section>
           )}
 
@@ -162,15 +186,14 @@ const VisualizarPreguntaModal = ({ isOpen, onClose, pregunta }: VisualizarPregun
                           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
                         )}
                         <div className="flex-1">
-                          <p
-                            className={`text-sm ${
+                          <RichTextRenderer
+                            content={opcion.texto?.trim() || 'Opcion con recurso visual'}
+                            className={`text-sm [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${
                               opcion.es_correcta
                                 ? 'font-semibold text-green-800'
                                 : 'font-medium text-usco-gris'
                             }`}
-                          >
-                            {opcion.texto?.trim() || 'Opcion con recurso visual'}
-                          </p>
+                          />
                           {optionImage && (
                             <img
                               src={optionImage}

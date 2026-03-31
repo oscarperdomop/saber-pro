@@ -12,6 +12,7 @@ from .views import (
     ModuloAdminViewSet,
     PlantillaExamenAdminViewSet,
     PreguntaAdminViewSet,
+    ReportesViewSet,
     RespuestaEstudianteViewSet,
 )
 
@@ -26,6 +27,7 @@ router.register(r'estudiante/mis-intentos', IntentoExamenViewSet, basename='estu
 router.register(r'estudiante/respuestas', RespuestaEstudianteViewSet, basename='estudiante-respuestas')
 router.register(r'profesor/ensayos', EvaluacionEnsayoViewSet, basename='profesor-ensayos')
 router.register(r'admin/analiticas', AnaliticasAdminViewSet, basename='admin-analiticas')
+router.register(r'admin/reportes', ReportesViewSet, basename='admin-reportes')
 
 urlpatterns = [
     path('ia/generar-opciones/', GenerarOpcionesIAView.as_view(), name='ia-generar-opciones'),

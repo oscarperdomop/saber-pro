@@ -186,6 +186,16 @@ const UsuariosPage = () => {
                     <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-bold text-purple-800">
                       Administrador
                     </span>
+                  ) : usuario.rol === 'PROFESOR' ? (
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-bold ${
+                        usuario.is_staff
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {usuario.is_staff ? 'Profesor (Staff)' : 'Profesor'}
+                    </span>
                   ) : (
                     <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800">
                       Estudiante

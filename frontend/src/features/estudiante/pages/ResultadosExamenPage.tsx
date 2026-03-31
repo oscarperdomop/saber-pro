@@ -157,11 +157,11 @@ const ResultadosExamenPage = () => {
   const groupPercentil = clampPercentil(Math.round((data.puntaje_saber_pro / 300) * 100))
 
   return (
-    <section className="mx-auto w-full max-w-6xl space-y-6">
-      <header className="rounded-2xl border border-usco-gris/50 bg-white p-8 text-center shadow-sm">
-        <p className="text-sm uppercase tracking-[0.2em] text-usco-gris">Puntaje Saber Pro</p>
-        <p className="mt-3 text-6xl font-bold text-usco-vino">{data.puntaje_saber_pro}</p>
-        <p className="mt-3 text-base text-usco-gris">
+    <section className="mx-auto w-full max-w-5xl space-y-5">
+      <header className="rounded-2xl border border-usco-gris/50 bg-white px-6 py-5 text-center shadow-sm">
+        <p className="text-xs uppercase tracking-[0.16em] text-usco-gris">Puntaje Saber Pro</p>
+        <p className="mt-2 text-5xl font-bold text-usco-vino md:text-[64px]">{data.puntaje_saber_pro}</p>
+        <p className="mt-2 text-sm text-usco-gris md:text-base">
           Aciertos: {data.aciertos_brutos} de {data.total_preguntas} preguntas
         </p>
       </header>
@@ -172,15 +172,15 @@ const ResultadosExamenPage = () => {
         </aside>
       )}
 
-      <section className="space-y-3">
-        <h2 className="text-center text-3xl font-semibold tracking-wide text-usco-gris">
+      <section className="space-y-2.5">
+        <h2 className="text-center text-xl font-semibold tracking-wide text-usco-gris md:text-2xl">
           •RESULTADOS POR MODULOS•
         </h2>
 
         <div className="overflow-x-auto border-2 border-usco-gris/80 bg-white shadow-sm">
-          <div className="min-w-[920px]">
-            <div className="border-b-2 border-usco-gris/80 bg-usco-vino px-5 py-3 text-center">
-              <p className="text-xl font-bold uppercase tracking-wide text-white">
+          <div className="min-w-[760px]">
+            <div className="border-b-2 border-usco-gris/80 bg-usco-vino px-4 py-2.5 text-center">
+              <p className="text-sm font-bold uppercase tracking-wide text-white md:text-base">
                 MODULOS COMPETENCIAS GENERICAS
               </p>
             </div>
@@ -188,22 +188,22 @@ const ResultadosExamenPage = () => {
             <table className="w-full">
               <thead>
                 <tr className="border-b-2 border-usco-gris/80 bg-usco-fondo">
-                  <th className="w-[30%] border-r-2 border-usco-gris/80 px-4 py-3 text-left text-2xl font-semibold text-usco-gris">
+                  <th className="w-[30%] border-r-2 border-usco-gris/80 px-3 py-2.5 text-left text-sm font-semibold text-usco-gris md:text-lg">
                     MODULOS
                   </th>
-                  <th className="w-[20%] border-r-2 border-usco-gris/80 px-4 py-3 text-center text-2xl font-semibold text-usco-gris">
+                  <th className="w-[20%] border-r-2 border-usco-gris/80 px-3 py-2.5 text-center text-sm font-semibold text-usco-gris md:text-lg">
                     PUNTAJE POR MODULO
                   </th>
-                  <th className="w-[50%] px-4 py-3 text-center text-2xl font-semibold text-usco-gris">
+                  <th className="w-[50%] px-3 py-2.5 text-center text-sm font-semibold text-usco-gris md:text-lg">
                     EN QUE PERCENTIL SE ENCUENTRA?
                   </th>
                 </tr>
                 <tr className="border-b-2 border-usco-gris/80 bg-white">
-                  <th className="border-r-2 border-usco-gris/80 px-4 py-2" />
-                  <th className="border-r-2 border-usco-gris/80 px-4 py-2 text-center text-sm font-normal text-usco-gris">
+                  <th className="border-r-2 border-usco-gris/80 px-3 py-1.5" />
+                  <th className="border-r-2 border-usco-gris/80 px-3 py-1.5 text-center text-xs font-normal text-usco-gris md:text-sm">
                     De 300 puntos posibles, su puntaje es
                   </th>
-                  <th className="px-4 py-2" />
+                  <th className="px-3 py-1.5" />
                 </tr>
               </thead>
 
@@ -223,13 +223,13 @@ const ResultadosExamenPage = () => {
                       index % 2 === 0 ? 'bg-white' : 'bg-usco-fondo/60'
                     }`}
                   >
-                    <td className="border-r-2 border-usco-gris/80 px-4 py-6 text-2xl font-medium leading-tight text-usco-gris">
+                    <td className="border-r-2 border-usco-gris/80 px-3 py-4 text-base font-medium leading-tight text-usco-gris md:text-lg">
                       {modulo.modulo}
                     </td>
-                    <td className="border-r-2 border-usco-gris/80 px-4 py-6 text-center text-4xl font-bold text-usco-vino">
+                    <td className="border-r-2 border-usco-gris/80 px-3 py-4 text-center text-2xl font-bold text-usco-vino md:text-3xl">
                       {modulo.puntaje}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-3">
                       <PercentileScale
                         percentil={modulo.percentil}
                         groupPercentil={groupPercentil}
@@ -242,7 +242,7 @@ const ResultadosExamenPage = () => {
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-8 pt-1 text-xs text-usco-gris">
+        <div className="flex items-center justify-center gap-6 pt-1 text-[11px] text-usco-gris md:text-xs">
           <div className="flex items-center gap-2">
             <svg width="10" height="8" viewBox="0 0 10 8">
               <polygon

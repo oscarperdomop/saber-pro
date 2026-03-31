@@ -15,7 +15,7 @@ export const useAuth = () => {
   return useMutation<LoginResponse, AxiosError<LoginErrorResponse>, LoginCredentials>({
     mutationFn: authService.login,
     onSuccess: (data) => {
-      const role = data.rol === 'ADMIN' || data.is_staff ? 'ADMIN' : 'ESTUDIANTE'
+      const role = data.rol
       const userData: User = {
         id: data.id,
         rol: role,
@@ -35,7 +35,7 @@ export const useAuth = () => {
         return
       }
 
-      navigate(resolveDefaultRoute(role))
+      navigate(resolveDefaultRoute(role, userData))
     },
   })
 }
