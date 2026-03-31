@@ -1,0 +1,6 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="88" fill="#8F141B"/>
+  <rect x="44" y="44" width="424" height="424" rx="72" fill="none" stroke="#DFD4A6" stroke-width="18"/>
+  <text x="256" y="248" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="108" font-weight="700" fill="#FFFFFF">USCO</text>
+  <text x="256" y="322" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="44" font-weight="700" fill="#DFD4A6">SABER PRO</text>
+</svg>

@@ -1,0 +1,61 @@
+# -----------------------------
+# OS / Editor
+# -----------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# -----------------------------
+# Python / Django
+# -----------------------------
+backend/.venv/
+backend/venv/
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+backend/db.sqlite3
+backend/db.sqlite3-journal
+
+# -----------------------------
+# Env files
+# -----------------------------
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+frontend/.env.local
+
+# -----------------------------
+# Node / Frontend
+# -----------------------------
+frontend/node_modules/
+node_modules/
+frontend/dist/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# -----------------------------
+# Build / misc
+# -----------------------------
+*.log
+*.tmp
+*.swp
+
+# -----------------------------
+# Local skills
+# -----------------------------
+skills/usco-react-frontend-architect/

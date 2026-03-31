@@ -1,0 +1,151 @@
+-- 1. Habilitar la extensión para generar UUIDs automáticamente
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- =================================================================
+-- MÓDULO 1: USUARIOS Y AUTENTICACIÓN
+-- =================================================================
+
+CREATE TABLE usuarios (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    documento VARCHAR(20) UNIQUE NOT NULL,
+    tipo_documento VARCHAR(5) NOT NULL, -- CC, TI, CE, PEP
+    codigo_estudiante VARCHAR(15) UNIQUE,
+    nombres VARCHAR(100) NOT NULL,
+    apellidos VARCHAR(100) NOT NULL,
+    correo_institucional VARCHAR(150) UNIQUE NOT NULL,
+    genero VARCHAR(1),
+    sede VARCHAR(50),
+    facultad VARCHAR(100),
+    programa VARCHAR(150) NOT NULL,
+    snies VARCHAR(15),
+    es_primer_ingreso BOOLEAN DEFAULT TRUE,
+    is_active BOOLEAN DEFAULT TRUE,
+    is_staff BOOLEAN DEFAULT FALSE, -- Para identificar a los administradores/docentes
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =================================================================
+-- MÓDULO 2: PARAMETRIZACIÓN (Jerarquía del Banco de Preguntas)
+-- =================================================================
+
+CREATE TABLE modulos_prueba (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL UNIQUE
+);
+
+CREATE TABLE categorias (
+    id SERIAL PRIMARY KEY,
+    modulo_id INTEGER NOT NULL REFERENCES modulos_prueba(id) ON DELETE CASCADE,
+    nombre VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE competencias (
+    id SERIAL PRIMARY KEY,
+    categoria_id INTEGER NOT NULL REFERENCES categorias(id) ON DELETE CASCADE,
+    nombre VARCHAR(100) NOT NULL
+);
+
+-- =================================================================
+-- MÓDULO 3: BANCO DE PREGUNTAS
+-- =================================================================
+
+CREATE TABLE preguntas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    modulo_id INTEGER NOT NULL REFERENCES modulos_prueba(id),
+    categoria_id INTEGER NOT NULL REFERENCES categorias(id),
+    competencia_id INTEGER NOT NULL REFERENCES competencias(id),
+    nivel_dificultad VARCHAR(15) NOT NULL, -- Fácil, Medio, Difícil
+    contexto_texto TEXT,
+    contexto_imagen VARCHAR(255), -- Ruta de la imagen en S3/CDN
+    enunciado TEXT NOT NULL,
+    justificacion TEXT,
+    limite_palabras INTEGER DEFAULT 3000, -- Solo para Comunicación Escrita
+    rubrica_evaluacion TEXT,
+    estado VARCHAR(15) DEFAULT 'Borrador', -- Borrador, Publicada, Archivada
+    version_original_id UUID REFERENCES preguntas(id) ON DELETE SET NULL, -- Para versionamiento
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE opciones_respuesta (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    pregunta_id UUID NOT NULL REFERENCES preguntas(id) ON DELETE CASCADE,
+    texto TEXT,
+    imagen VARCHAR(255),
+    es_correcta BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- =================================================================
+-- MÓDULO 4: CONFIGURACIÓN DE EXÁMENES (SIMULACROS)
+-- =================================================================
+
+CREATE TABLE plantillas_examen (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    titulo VARCHAR(200) NOT NULL,
+    descripcion TEXT,
+    tiempo_minutos INTEGER, -- NULL o 0 significa sin límite
+    fecha_inicio TIMESTAMP NOT NULL,
+    fecha_fin TIMESTAMP NOT NULL,
+    mostrar_resultados_inmediatos BOOLEAN DEFAULT FALSE,
+    es_simulacro_oficial BOOLEAN DEFAULT FALSE,
+    estado VARCHAR(15) DEFAULT 'Borrador', -- Borrador, Activo, Inactivo
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabla intermedia para asociar un examen a múltiples programas específicos
+CREATE TABLE plantillas_programas (
+    plantilla_id UUID NOT NULL REFERENCES plantillas_examen(id) ON DELETE CASCADE,
+    programa_destino VARCHAR(150) NOT NULL,
+    PRIMARY KEY (plantilla_id, programa_destino)
+);
+
+CREATE TABLE reglas_examen (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    examen_id UUID NOT NULL REFERENCES plantillas_examen(id) ON DELETE CASCADE,
+    modulo_id INTEGER NOT NULL REFERENCES modulos_prueba(id),
+    categoria_id INTEGER REFERENCES categorias(id) ON DELETE SET NULL, -- Puede ser NULL si saca de toda la categoría
+    cantidad_preguntas INTEGER NOT NULL CHECK (cantidad_preguntas > 0),
+    nivel_dificultad VARCHAR(15) DEFAULT 'Balanceada'
+);
+
+-- =================================================================
+-- MÓDULO 5: REALIZACIÓN (INTENTOS DEL ESTUDIANTE)
+-- =================================================================
+
+CREATE TABLE intentos_examen (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    estudiante_id UUID NOT NULL REFERENCES usuarios(id),
+    plantilla_examen_id UUID NOT NULL REFERENCES plantillas_examen(id),
+    fecha_inicio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_finalizacion TIMESTAMP,
+    estado VARCHAR(30) DEFAULT 'En Progreso' -- En Progreso, Pendiente Calificacion, Finalizado
+);
+
+-- Control de bloqueo por módulos para la UX del estudiante (US-009)
+CREATE TABLE intentos_modulo (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    intento_examen_id UUID NOT NULL REFERENCES intentos_examen(id) ON DELETE CASCADE,
+    modulo_id INTEGER NOT NULL REFERENCES modulos_prueba(id),
+    estado VARCHAR(20) DEFAULT 'Pendiente' -- Pendiente, En Progreso, Completado
+);
+
+CREATE TABLE respuestas_estudiante (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    intento_id UUID NOT NULL REFERENCES intentos_examen(id) ON DELETE CASCADE,
+    pregunta_id UUID NOT NULL REFERENCES preguntas(id),
+    opcion_seleccionada_id UUID REFERENCES opciones_respuesta(id) ON DELETE SET NULL, -- NULL significa pregunta en blanco
+    texto_respuesta_abierta TEXT,
+    marcada_para_revision BOOLEAN DEFAULT FALSE,
+    puntaje_calificado DECIMAL(5,2), -- Llenado por el sistema o profesor al finalizar
+    fecha_respuesta TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =================================================================
+-- 6. ÍNDICES DE OPTIMIZACIÓN (Performance para las analíticas US-012)
+-- =================================================================
+
+-- Estos índices evitan que la base de datos colapse al buscar exámenes de un estudiante o calcular promedios
+CREATE INDEX idx_intentos_estudiante ON intentos_examen(estudiante_id);
+CREATE INDEX idx_respuestas_intento ON respuestas_estudiante(intento_id);
+CREATE INDEX idx_preguntas_modulo_estado ON preguntas(modulo_id, estado);
+CREATE INDEX idx_opciones_pregunta ON opciones_respuesta(pregunta_id);
