@@ -51,12 +51,16 @@ const getEstadoBadgeClass = (estado?: string) => {
 }
 
 const getDificultadBadgeClass = (dificultad?: string) => {
-  const normalized = (dificultad ?? '').trim()
+  const normalized = (dificultad ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
 
-  if (normalized === 'Facil' || normalized === 'FÃ¡cil') {
+  if (normalized === 'facil') {
     return 'bg-green-100 text-green-800 border-green-200'
   }
-  if (normalized === 'Media' || normalized === 'Medio') {
+  if (normalized === 'media' || normalized === 'medio') {
     return 'bg-yellow-100 text-yellow-800 border-yellow-200'
   }
   return 'bg-red-100 text-red-700 border-red-200'
@@ -77,16 +81,14 @@ const renderOpcion = (preguntaId: string | number, opcion: Opcion, index: number
     <li
       key={`${preguntaId}-op-${opcion.id}-${index}`}
       className={`rounded-xl border px-3 py-3 ${
-        opcion.es_correcta
-          ? 'border-green-300 bg-green-50'
-          : 'border-gray-200 bg-gray-50'
+        opcion.es_correcta ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50'
       }`}
     >
       <div className="flex items-start gap-2">
         {opcion.es_correcta && <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />}
         <div className="flex-1">
           <RichTextRenderer
-            content={opcion.texto?.trim() || 'Opcion con recurso visual'}
+            content={opcion.texto?.trim() || 'Opción con recurso visual'}
             className={`text-sm [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${
               opcion.es_correcta ? 'font-semibold text-green-800' : 'font-medium text-usco-gris'
             }`}
@@ -94,7 +96,7 @@ const renderOpcion = (preguntaId: string | number, opcion: Opcion, index: number
           {optionImage && (
             <img
               src={optionImage}
-              alt={`Imagen de opcion ${index + 1}`}
+              alt={`Imagen de opción ${index + 1}`}
               className="mt-2 max-h-48 rounded-md object-contain"
             />
           )}
@@ -139,7 +141,7 @@ const PreguntaPane = ({ pregunta, title }: { pregunta: Pregunta; title: string }
 
       {preguntaImage && (
         <section className="mt-4 rounded-xl border border-usco-ocre/70 bg-white p-4">
-          <h4 className="text-xs font-bold uppercase tracking-wide text-usco-gris">Imagen de la Pregunta</h4>
+          <h4 className="text-xs font-bold uppercase tracking-wide text-usco-gris">Imagen de la pregunta</h4>
           <div className="mt-3 flex justify-center">
             <img
               src={preguntaImage}
@@ -187,11 +189,11 @@ const CompararPreguntasModal = ({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+    <div className="bank-scope fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
       <div className="w-full max-w-6xl overflow-hidden rounded-2xl border border-usco-ocre/80 bg-white shadow-2xl">
         <header className="flex items-start justify-between gap-3 border-b border-usco-ocre/70 px-5 py-4">
           <div>
-            <h2 className="text-xl font-bold text-usco-vino">Comparacion de Versiones</h2>
+            <h2 className="text-xl font-bold text-usco-vino">Comparación de Versiones</h2>
             <p className="mt-1 text-sm text-usco-gris">
               Revisa diferencias entre dos preguntas seleccionadas.
             </p>
@@ -201,7 +203,7 @@ const CompararPreguntasModal = ({
             type="button"
             onClick={onClose}
             className="rounded-lg p-1.5 text-usco-gris transition hover:bg-usco-fondo hover:text-usco-vino"
-            aria-label="Cerrar comparacion"
+            aria-label="Cerrar comparación"
           >
             <X className="h-5 w-5" />
           </button>
@@ -209,8 +211,8 @@ const CompararPreguntasModal = ({
 
         <div className="max-h-[80vh] overflow-y-auto p-5">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <PreguntaPane pregunta={preguntaA} title="Version A" />
-            <PreguntaPane pregunta={preguntaB} title="Version B" />
+            <PreguntaPane pregunta={preguntaA} title="Versión A" />
+            <PreguntaPane pregunta={preguntaB} title="Versión B" />
           </div>
         </div>
       </div>
@@ -220,3 +222,4 @@ const CompararPreguntasModal = ({
 }
 
 export default CompararPreguntasModal
+

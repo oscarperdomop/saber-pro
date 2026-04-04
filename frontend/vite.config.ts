@@ -4,6 +4,23 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    host: true,
+    allowedHosts: ['.tunnelmole.net', 'localhost', '127.0.0.1'],
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/ws': {
+        target: 'ws://127.0.0.1:8000',
+        ws: true,
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

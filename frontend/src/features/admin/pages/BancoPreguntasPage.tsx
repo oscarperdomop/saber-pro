@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -70,10 +70,10 @@ const getModuloNombre = (pregunta: Pregunta): string => {
   }
 
   if (pregunta.modulo_id) {
-    return `Modulo ${pregunta.modulo_id}`
+    return `Módulo ${pregunta.modulo_id}`
   }
 
-  return `Modulo ${String(pregunta.modulo)}`
+  return `Módulo ${String(pregunta.modulo)}`
 }
 
 const getDificultadKey = (dificultad: string): 'facil' | 'media' | 'alta' => {
@@ -94,7 +94,7 @@ const getDificultadLabel = (dificultad: string): string => {
   const key = getDificultadKey(dificultad)
 
   if (key === 'facil') {
-    return 'Facil'
+    return 'Fácil'
   }
 
   if (key === 'media') {
@@ -442,11 +442,11 @@ const BancoPreguntasPage = () => {
   }
 
   return (
-    <section className="mx-auto w-full max-w-7xl space-y-6">
+    <section className="bank-scope mx-auto w-full max-w-7xl space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-usco-vino">Banco de Preguntas</h1>
-          <p className="mt-1 text-sm text-usco-gris">Gestion modular de preguntas para el ecosistema Saber Pro.</p>
+          <h1 className="text-lg font-bold text-usco-vino">BANCO DE PREGUNTAS</h1>
+          <p className="mt-1 text-sm text-usco-gris">Gestión modular de preguntas para el ecosistema Saber Pro.</p>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -483,7 +483,7 @@ const BancoPreguntasPage = () => {
             {resumenUltimoLote
               ? ` (${resumenUltimoLote.preguntasCreadas} preguntas, ${resumenUltimoLote.filasConIA} filas con IA).`
               : '.'}{' '}
-            Subiste el archivo equivocado?
+            ¿Subiste el archivo equivocado?
           </p>
           <button
             type="button"
@@ -491,7 +491,7 @@ const BancoPreguntasPage = () => {
             disabled={revertirCargaMutation.isPending}
             className="font-bold text-red-700 underline transition hover:text-red-900 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {revertirCargaMutation.isPending ? 'Revirtiendo...' : 'Deshacer ultima carga'}
+            {revertirCargaMutation.isPending ? 'Revirtiendo...' : 'Deshacer última carga'}
           </button>
         </section>
       )}
@@ -505,10 +505,10 @@ const BancoPreguntasPage = () => {
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-2xl border border-usco-ocre/70 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-[0.14em] text-usco-gris/80">Total Preguntas</p>
-          <p className="mt-2 text-3xl font-bold text-usco-vino">{resumenGlobal.total}</p>
+          <p className="mt-2 text-2xl font-bold text-usco-vino">{resumenGlobal.total}</p>
         </article>
         <article className="rounded-2xl border border-usco-ocre/80 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.14em] text-usco-gris/80">Faciles</p>
+          <p className="text-xs uppercase tracking-[0.14em] text-usco-gris/80">Fáciles</p>
           <p className="mt-2 text-3xl font-bold text-usco-gris">{resumenGlobal.facil}</p>
         </article>
         <article className="rounded-2xl border border-usco-ocre/80 bg-white p-4 shadow-sm">
@@ -541,7 +541,7 @@ const BancoPreguntasPage = () => {
               onChange={(event) => setSelectedModulo(event.target.value)}
               className="h-11 bg-transparent outline-none"
             >
-              <option value="">Todos los modulos</option>
+              <option value="">Todos los módulos</option>
               {moduloOptions.map((modulo) => (
                 <option key={modulo} value={modulo}>
                   {modulo}
@@ -559,8 +559,8 @@ const BancoPreguntasPage = () => {
               }
               className="h-11 bg-transparent outline-none"
             >
-              <option value="nombre">Orden: Modulo A-Z</option>
-              <option value="total_desc">Orden: Mas preguntas</option>
+              <option value="nombre">Orden: Módulo A-Z</option>
+              <option value="total_desc">Orden: Más preguntas</option>
               <option value="total_asc">Orden: Menos preguntas</option>
             </select>
           </label>
@@ -577,7 +577,7 @@ const BancoPreguntasPage = () => {
               className="h-4 w-4 rounded border-gray-300 text-usco-vino focus:ring-usco-vino"
             />
             <AlertTriangle className="h-4 w-4 text-usco-vino" />
-            Ver Preguntas Criticas (tasa de error &gt;= 60%)
+            Ver Preguntas Críticas (tasa de error &gt;= 60%)
           </label>
 
           {verPreguntasCriticas && (
@@ -603,7 +603,7 @@ const BancoPreguntasPage = () => {
                 className="rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none focus:border-usco-vino"
               >
                 <option value="">Todos los niveles</option>
-                <option value="Facil">Facil</option>
+                <option value="Facil">Fácil</option>
                 <option value="Media">Media</option>
                 <option value="Alta">Alta</option>
               </select>
@@ -615,17 +615,17 @@ const BancoPreguntasPage = () => {
       {verPreguntasCriticas && (
         <section className="overflow-hidden rounded-2xl border border-usco-ocre/80 bg-white shadow-sm">
           <header className="border-b border-usco-ocre/60 px-4 py-3">
-            <h3 className="text-base font-semibold text-usco-vino">Preguntas Criticas</h3>
+            <h3 className="text-base font-semibold text-usco-vino">Preguntas Críticas</h3>
             <p className="text-sm text-usco-gris">
-              Audita preguntas con alta tasa de error para mejorar su redaccion.
+              Audita preguntas con alta tasa de error para mejorar su redacción.
             </p>
           </header>
 
           {isCriticasLoading ? (
-            <div className="p-4 text-sm text-usco-gris">Cargando preguntas criticas...</div>
+            <div className="p-4 text-sm text-usco-gris">Cargando preguntas críticas...</div>
           ) : preguntasCriticas.length === 0 ? (
             <div className="p-4 text-sm text-usco-gris">
-              No hay preguntas criticas para los filtros seleccionados.
+              No hay preguntas críticas para los filtros seleccionados.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -636,7 +636,7 @@ const BancoPreguntasPage = () => {
                       Enunciado
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-usco-gris">
-                      Modulo
+                      Módulo
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-usco-gris">
                       Nivel
@@ -651,7 +651,7 @@ const BancoPreguntasPage = () => {
                       Tasa Error
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-usco-gris">
-                      Accion
+                      Acción
                     </th>
                   </tr>
                 </thead>
@@ -705,7 +705,7 @@ const BancoPreguntasPage = () => {
         <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-sm text-usco-gris shadow-sm">
           {preguntas.length === 0
             ? 'No hay preguntas registradas en este momento.'
-            : 'No hay preguntas que coincidan con el criterio de busqueda.'}
+            : 'No hay preguntas que coincidan con el criterio de búsqueda.'}
         </section>
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -737,12 +737,12 @@ const BancoPreguntasPage = () => {
 
                   <h2 className={`text-lg font-semibold ${theme.text}`}>{modulo}</h2>
                   <p className="mt-1 text-sm text-usco-gris">
-                    Distribucion por dificultad para este modulo.
+                    Distribución por dificultad para este módulo.
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-2">
                     <span className="rounded-md border border-usco-ocre/80 bg-usco-fondo px-2.5 py-1 text-xs font-semibold text-usco-gris">
-                      Facil: {data.stats.facil}
+                      Fácil: {data.stats.facil}
                     </span>
                     <span className="rounded-md border border-usco-ocre/80 bg-usco-ocre/20 px-2.5 py-1 text-xs font-semibold text-usco-gris">
                       Media: {data.stats.media}
@@ -761,7 +761,7 @@ const BancoPreguntasPage = () => {
                   </div>
 
                   <div className="mt-4 flex items-center justify-between">
-                    <span className="text-xs text-usco-gris/75">Modulo activo en banco</span>
+                    <span className="text-xs text-usco-gris/75">Módulo activo en banco</span>
                     <button
                       type="button"
                       onClick={() => navigate(`/preguntas/modulo/${encodeURIComponent(modulo)}`)}
@@ -780,8 +780,8 @@ const BancoPreguntasPage = () => {
       {preguntasRecientes.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-usco-ocre/80 bg-white shadow-sm">
           <header className="border-b border-usco-ocre/60 px-4 py-3">
-            <h3 className="text-base font-semibold text-usco-vino">Preguntas Recientes</h3>
-            <p className="text-sm text-usco-gris">Ultimas preguntas segun el filtro aplicado.</p>
+	            <h3 className="text-base font-semibold text-usco-vino">Preguntas Recientes</h3>
+	            <p className="text-sm text-usco-gris">Últimas preguntas según el filtro aplicado.</p>
           </header>
 
           <div className="divide-y divide-usco-ocre/50">
@@ -799,10 +799,10 @@ const BancoPreguntasPage = () => {
                       />
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-usco-gris/80">{modulo}</span>
+	                    <span className="text-xs text-usco-gris/80">{modulo}</span>
                       <span
                         className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
-                          dificultad === 'Facil'
+                          dificultad === 'Fácil'
                             ? 'bg-usco-fondo text-usco-gris'
                             : dificultad === 'Media'
                               ? 'bg-usco-ocre/25 text-usco-gris'
@@ -824,7 +824,7 @@ const BancoPreguntasPage = () => {
                     onClick={() => navigate(`/preguntas/modulo/${encodeURIComponent(modulo)}`)}
                     className="inline-flex items-center justify-center rounded-lg border border-usco-vino px-3 py-1.5 text-xs font-semibold text-usco-vino transition hover:bg-usco-vino/10"
                   >
-                    Abrir modulo
+	                    Abrir módulo
                   </button>
                 </article>
               )
@@ -842,8 +842,8 @@ const BancoPreguntasPage = () => {
 
       <ConfirmDialog
         open={Boolean(lotePendienteRevertir)}
-        title="Deshacer ultima carga masiva"
-        message="Se eliminaran todas las preguntas creadas en ese lote. Esta accion no se puede deshacer."
+        title="Deshacer última carga masiva"
+	        message="Se eliminarán todas las preguntas creadas en ese lote. Esta acción no se puede deshacer."
         confirmText="Deshacer carga"
         cancelText="Cancelar"
         isLoading={revertirCargaMutation.isPending}
@@ -861,5 +861,6 @@ const BancoPreguntasPage = () => {
 }
 
 export default BancoPreguntasPage
+
 
 

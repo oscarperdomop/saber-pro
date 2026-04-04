@@ -45,12 +45,21 @@ SECRET_KEY = 'django-insecure-vatv7#r*mtvsk=cx2s%uli1ks8ha^3)3l_dh)0f1_u%q7s=6#i
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv(
+        'DJANGO_ALLOWED_HOSTS',
+        'localhost,127.0.0.1,[::1],.tunnelmole.net',
+    ).split(',')
+    if host.strip()
+]
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -94,6 +103,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'core.wsgi.application'
+ASGI_APPLICATION = 'core.asgi.application'
 
 
 # Database
@@ -167,4 +177,65 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 
+CHANNELS_REDIS_URL = os.getenv('CHANNELS_REDIS_URL', '').strip()
+
+if CHANNELS_REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [CHANNELS_REDIS_URL]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        }
+    }
+
 CORS_ALLOW_ALL_ORIGINS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        'DJANGO_CSRF_TRUSTED_ORIGINS',
+        'http://localhost:5173,http://127.0.0.1:5173,https://*.tunnelmole.net,http://*.tunnelmole.net',
+    ).split(',')
+    if origin.strip()
+]
+
+LATEX_COMPILER = os.getenv('LATEX_COMPILER', 'pdflatex').strip() or 'pdflatex'
+LATEX_POPPLER_PATH = os.getenv('LATEX_POPPLER_PATH', '').strip()
+
+LATEX_PREAMBLE_INSTITUCIONAL = r"""
+\documentclass[preview,border=2pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable,skins}
+\usepackage{hyperref}
+
+\newtcolorbox{pregunta}[1][]{
+  breakable,
+  colback=white,
+  colframe=black!35,
+  boxrule=0.6pt,
+  arc=1mm,
+  left=2mm,
+  right=2mm,
+  top=1.5mm,
+  bottom=1.5mm,
+  title={#1},
+  fonttitle=\bfseries
+}
+"""
+
+LATEX_DOCUMENT_WRAPPER = r"\begin{document}\newpage{}\end{document}"

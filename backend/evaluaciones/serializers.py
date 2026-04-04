@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework.serializers import SerializerMethodField
 
@@ -14,6 +15,7 @@ from .models import (
     ReglaExamen,
     RespuestaEstudiante,
 )
+from .utils import compilar_fragmento_latex
 
 
 class OpcionRespuestaSerializer(serializers.ModelSerializer):
@@ -112,6 +114,32 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
             'Dificil': 'Dificil',
         }.get(dificultad, 'Medio')
 
+    @staticmethod
+    def _compile_latex_or_raise(pregunta):
+        fragmento = str(getattr(pregunta, 'codigo_latex', '') or '').strip()
+        if not fragmento:
+            raise serializers.ValidationError(
+                {'codigo_latex': ['Debes escribir codigo LaTeX cuando el soporte es LATEX.']}
+            )
+
+        image_file, error = compilar_fragmento_latex(
+            fragmento_codigo=fragmento,
+            nombre_archivo=f'pregunta_{pregunta.id}_grafica',
+        )
+
+        if not image_file:
+            raise serializers.ValidationError(
+                {
+                    'codigo_latex': [
+                        'No fue posible compilar el codigo LaTeX. '
+                        f'Detalle tecnico: {error}'
+                    ]
+                }
+            )
+
+        pregunta.imagen_grafica.save(image_file.name, image_file, save=False)
+        pregunta.save(update_fields=['imagen_grafica', 'updated_at'])
+
     def validate(self, attrs):
         modulo = attrs.get('modulo') or getattr(self.instance, 'modulo', None)
         categoria = attrs.get('categoria') if 'categoria' in attrs else getattr(self.instance, 'categoria', None)
@@ -167,93 +195,102 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        opciones_data = validated_data.pop('opciones', [])
-        tipo_pregunta = validated_data.pop('tipo_pregunta', '')
-        dificultad = validated_data.pop('dificultad', '')
-        skip_options_validation = bool(self.context.get('skip_options_validation'))
+        with transaction.atomic():
+            opciones_data = validated_data.pop('opciones', [])
+            tipo_pregunta = validated_data.pop('tipo_pregunta', '')
+            dificultad = validated_data.pop('dificultad', '')
+            skip_options_validation = bool(self.context.get('skip_options_validation'))
 
-        if not validated_data.get('nivel_dificultad'):
-            validated_data['nivel_dificultad'] = self._map_dificultad(dificultad) if dificultad else 'Medio'
+            if not validated_data.get('nivel_dificultad'):
+                validated_data['nivel_dificultad'] = self._map_dificultad(dificultad) if dificultad else 'Medio'
 
-        if tipo_pregunta == 'Ensayo':
-            if validated_data.get('limite_palabras') in [None, '']:
-                validated_data['limite_palabras'] = 300
-            opciones_data = []
-        else:
-            validated_data['limite_palabras'] = None
-            if not skip_options_validation:
-                if len(opciones_data) < 2:
-                    raise serializers.ValidationError(
-                        {'opciones': ['Debes agregar al menos dos opciones para una pregunta de opcion multiple.']}
-                    )
-                if not any(opcion.get('es_correcta') for opcion in opciones_data):
-                    raise serializers.ValidationError(
-                        {'opciones': ['Debes marcar al menos una opcion correcta.']}
-                    )
+            if tipo_pregunta == 'Ensayo':
+                if validated_data.get('limite_palabras') in [None, '']:
+                    validated_data['limite_palabras'] = 300
+                opciones_data = []
+            else:
+                validated_data['limite_palabras'] = None
+                if not skip_options_validation:
+                    if len(opciones_data) < 2:
+                        raise serializers.ValidationError(
+                            {'opciones': ['Debes agregar al menos dos opciones para una pregunta de opcion multiple.']}
+                        )
+                    if not any(opcion.get('es_correcta') for opcion in opciones_data):
+                        raise serializers.ValidationError(
+                            {'opciones': ['Debes marcar al menos una opcion correcta.']}
+                        )
 
-        soporte_multimedia = str(validated_data.get('soporte_multimedia') or 'NINGUNO')
-        if soporte_multimedia == 'NINGUNO':
-            validated_data['imagen_grafica'] = None
-            validated_data['codigo_latex'] = None
-        elif soporte_multimedia == 'IMAGEN':
-            validated_data['codigo_latex'] = None
-        elif soporte_multimedia == 'LATEX':
-            validated_data['imagen_grafica'] = None
+            soporte_multimedia = str(validated_data.get('soporte_multimedia') or 'NINGUNO')
+            if soporte_multimedia == 'NINGUNO':
+                validated_data['imagen_grafica'] = None
+                validated_data['codigo_latex'] = None
+            elif soporte_multimedia == 'IMAGEN':
+                validated_data['codigo_latex'] = None
+            elif soporte_multimedia == 'LATEX':
+                # La imagen final se compila en servidor; no aceptamos subida manual en este modo.
+                validated_data['imagen_grafica'] = None
 
-        pregunta = Pregunta.objects.create(**validated_data)
+            pregunta = Pregunta.objects.create(**validated_data)
 
-        for opcion in opciones_data:
-            OpcionRespuesta.objects.create(pregunta=pregunta, **opcion)
+            for opcion in opciones_data:
+                OpcionRespuesta.objects.create(pregunta=pregunta, **opcion)
 
-        return pregunta
+            if soporte_multimedia == 'LATEX':
+                self._compile_latex_or_raise(pregunta)
+
+            return pregunta
 
     def update(self, instance, validated_data):
-        opciones_data = validated_data.pop('opciones', [])
-        tipo_pregunta = validated_data.pop('tipo_pregunta', '')
-        dificultad = validated_data.pop('dificultad', '')
-        skip_options_validation = bool(self.context.get('skip_options_validation'))
+        with transaction.atomic():
+            opciones_data = validated_data.pop('opciones', [])
+            tipo_pregunta = validated_data.pop('tipo_pregunta', '')
+            dificultad = validated_data.pop('dificultad', '')
+            skip_options_validation = bool(self.context.get('skip_options_validation'))
 
-        if dificultad:
-            validated_data['nivel_dificultad'] = self._map_dificultad(dificultad)
+            if dificultad:
+                validated_data['nivel_dificultad'] = self._map_dificultad(dificultad)
 
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
 
-        soporte_multimedia = str(getattr(instance, 'soporte_multimedia', 'NINGUNO') or 'NINGUNO')
-        if soporte_multimedia == 'NINGUNO':
-            instance.imagen_grafica = None
-            instance.codigo_latex = None
-        elif soporte_multimedia == 'IMAGEN':
-            instance.codigo_latex = None
-        elif soporte_multimedia == 'LATEX':
-            instance.imagen_grafica = None
+            soporte_multimedia = str(getattr(instance, 'soporte_multimedia', 'NINGUNO') or 'NINGUNO')
+            if soporte_multimedia == 'NINGUNO':
+                instance.imagen_grafica = None
+                instance.codigo_latex = None
+            elif soporte_multimedia == 'IMAGEN':
+                instance.codigo_latex = None
+            elif soporte_multimedia == 'LATEX':
+                instance.imagen_grafica = None
 
-        if tipo_pregunta == 'Ensayo':
-            if instance.limite_palabras in [None, '']:
-                instance.limite_palabras = 300
-            opciones_data = []
-        elif tipo_pregunta == 'Opcion Multiple':
-            instance.limite_palabras = None
-            if not skip_options_validation:
-                if len(opciones_data) < 2:
-                    raise serializers.ValidationError(
-                        {'opciones': ['Debes agregar al menos dos opciones para una pregunta de opcion multiple.']}
-                    )
-                if not any(opcion.get('es_correcta') for opcion in opciones_data):
-                    raise serializers.ValidationError(
-                        {'opciones': ['Debes marcar al menos una opcion correcta.']}
-                    )
+            if tipo_pregunta == 'Ensayo':
+                if instance.limite_palabras in [None, '']:
+                    instance.limite_palabras = 300
+                opciones_data = []
+            elif tipo_pregunta == 'Opcion Multiple':
+                instance.limite_palabras = None
+                if not skip_options_validation:
+                    if len(opciones_data) < 2:
+                        raise serializers.ValidationError(
+                            {'opciones': ['Debes agregar al menos dos opciones para una pregunta de opcion multiple.']}
+                        )
+                    if not any(opcion.get('es_correcta') for opcion in opciones_data):
+                        raise serializers.ValidationError(
+                            {'opciones': ['Debes marcar al menos una opcion correcta.']}
+                        )
 
-        instance.save()
+            instance.save()
 
-        if tipo_pregunta == 'Ensayo':
-            instance.opciones.all().delete()
-        elif tipo_pregunta and (opciones_data or not skip_options_validation):
-            instance.opciones.all().delete()
-            for opcion in opciones_data:
-                OpcionRespuesta.objects.create(pregunta=instance, **opcion)
+            if tipo_pregunta == 'Ensayo':
+                instance.opciones.all().delete()
+            elif tipo_pregunta and (opciones_data or not skip_options_validation):
+                instance.opciones.all().delete()
+                for opcion in opciones_data:
+                    OpcionRespuesta.objects.create(pregunta=instance, **opcion)
 
-        return instance
+            if soporte_multimedia == 'LATEX':
+                self._compile_latex_or_raise(instance)
+
+            return instance
 
 
 class ReglaExamenSerializer(serializers.ModelSerializer):
@@ -369,11 +406,12 @@ class PlantillaExamenAdminSerializer(serializers.ModelSerializer):
 
         self._validate_reglas_disponibles(reglas_data)
 
-        plantilla = PlantillaExamen.objects.create(**validated_data)
-        plantilla.programas_destino.set(programas_data)
+        with transaction.atomic():
+            plantilla = PlantillaExamen.objects.create(**validated_data)
+            plantilla.programas_destino.set(programas_data)
 
-        for regla in reglas_data:
-            ReglaExamen.objects.create(examen=plantilla, **regla)
+            for regla in reglas_data:
+                ReglaExamen.objects.create(examen=plantilla, **regla)
 
         return plantilla
 
@@ -384,17 +422,18 @@ class PlantillaExamenAdminSerializer(serializers.ModelSerializer):
         if reglas_data is not None:
             self._validate_reglas_disponibles(reglas_data)
 
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
+        with transaction.atomic():
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
 
-        if programas_data is not None:
-            instance.programas_destino.set(programas_data)
+            if programas_data is not None:
+                instance.programas_destino.set(programas_data)
 
-        if reglas_data is not None:
-            instance.reglas.all().delete()
-            for regla in reglas_data:
-                ReglaExamen.objects.create(examen=instance, **regla)
+            if reglas_data is not None:
+                instance.reglas.all().delete()
+                for regla in reglas_data:
+                    ReglaExamen.objects.create(examen=instance, **regla)
 
         return instance
 

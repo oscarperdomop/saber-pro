@@ -111,14 +111,14 @@ const ActivarCuentaPage = () => {
           </div>
           <h1 className="text-3xl font-bold text-usco-vino">Activa tu cuenta</h1>
           <p className="mt-2 text-sm text-usco-gris">
-            Por seguridad, debes cambiar tu contrasena por defecto.
+            Por seguridad, debes cambiar tu contraseña por defecto.
           </p>
         </header>
 
         <form className="space-y-5" onSubmit={handleSubmit}>
           <div>
             <label className="mb-2 block text-sm font-medium text-usco-gris" htmlFor="password_actual">
-              Contrasena Actual
+              Contraseña Actual
             </label>
             <div className="relative">
               <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
@@ -129,14 +129,14 @@ const ActivarCuentaPage = () => {
                 value={passwordActual}
                 onChange={(event) => setPasswordActual(event.target.value)}
                 className="w-full rounded-xl border border-usco-ocre/70 py-3 pl-10 pr-4 text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
-                placeholder="Ingresa tu contrasena actual"
+                placeholder="Ingresa tu contraseña actual"
               />
             </div>
           </div>
 
           <div>
             <label className="mb-2 block text-sm font-medium text-usco-gris" htmlFor="password_nueva">
-              Nueva Contrasena
+              Nueva Contraseña
             </label>
             <div className="relative">
               <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
@@ -147,7 +147,7 @@ const ActivarCuentaPage = () => {
                 value={passwordNueva}
                 onChange={(event) => setPasswordNueva(event.target.value)}
                 className="w-full rounded-xl border border-usco-ocre/70 py-3 pl-10 pr-4 text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
-                placeholder="Define una nueva contrasena segura"
+                placeholder="Define una nueva contraseña segura"
               />
             </div>
           </div>

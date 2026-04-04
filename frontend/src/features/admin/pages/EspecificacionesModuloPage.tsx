@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
+import { Moon, Plus, Sun, Trash2 } from 'lucide-react'
 import preguntasService from '../services/preguntasService'
 import especificacionesService from '../services/especificacionesService'
 import type { Categoria, Competencia } from '../../../types/evaluaciones'
 import type { Modulo } from '../../../types/preguntas'
+import { isDarkModeEnabled, setDarkModeEnabled } from '../../../lib/theme'
 
 interface ApiErrorResponse {
   detail?: string
@@ -18,7 +19,12 @@ const EspecificacionesModuloPage = () => {
   const [moduloSeleccionado, setModuloSeleccionado] = useState<number | ''>('')
   const [nuevaCategoria, setNuevaCategoria] = useState('')
   const [nuevaCompetencia, setNuevaCompetencia] = useState('')
+  const [darkModeEnabled, setDarkModeState] = useState(false)
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  useEffect(() => {
+    setDarkModeState(isDarkModeEnabled())
+  }, [])
 
   const getMutationError = (error: unknown) => {
     const axiosError = error as AxiosError<ApiErrorResponse>
@@ -26,7 +32,7 @@ const EspecificacionesModuloPage = () => {
     if (detail) {
       return String(detail)
     }
-    return 'No fue posible completar la accion solicitada.'
+    return 'No fue posible completar la acción solicitada.'
   }
 
   const {
@@ -65,7 +71,7 @@ const EspecificacionesModuloPage = () => {
     mutationFn: especificacionesService.crearCategoria,
     onSuccess: () => {
       setNuevaCategoria('')
-      setFeedback({ type: 'success', message: 'Categoria creada correctamente.' })
+      setFeedback({ type: 'success', message: 'Categoría creada correctamente.' })
       queryClient.invalidateQueries({ queryKey: ['categorias', moduloSeleccionado] })
     },
     onError: (error) => {
@@ -76,7 +82,7 @@ const EspecificacionesModuloPage = () => {
   const eliminarCategoriaMutation = useMutation({
     mutationFn: especificacionesService.eliminarCategoria,
     onSuccess: () => {
-      setFeedback({ type: 'success', message: 'Categoria eliminada correctamente.' })
+      setFeedback({ type: 'success', message: 'Categoría eliminada correctamente.' })
       queryClient.invalidateQueries({ queryKey: ['categorias', moduloSeleccionado] })
     },
     onError: (error) => {
@@ -137,14 +143,29 @@ const EspecificacionesModuloPage = () => {
     })
   }
 
+  const toggleDarkMode = () => {
+    const nextValue = !darkModeEnabled
+    setDarkModeState(nextValue)
+    setDarkModeEnabled(nextValue)
+  }
+
   return (
     <section className="mx-auto w-full max-w-7xl space-y-6">
-      <header>
-        <h1 className="text-3xl font-bold text-usco-vino">Especificaciones de los Modulos</h1>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-lg font-bold text-usco-vino">ESPECIFICACIONES DE LOS MÓDULOS</h1>
+        <button
+          type="button"
+          onClick={toggleDarkMode}
+          className="inline-flex items-center gap-2 rounded-xl border border-usco-ocre/80 bg-white px-4 py-2 text-sm font-semibold text-usco-gris transition hover:border-usco-vino hover:text-usco-vino"
+          title="Activar o desactivar modo oscuro (fase Banco de Preguntas)"
+        >
+          {darkModeEnabled ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          {darkModeEnabled ? 'Modo Claro' : 'Modo Oscuro'}
+        </button>
       </header>
 
       <div className="mb-8 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-        <label className="mb-2 block text-sm font-bold text-gray-700">Seleccionar Modulo:</label>
+        <label className="mb-2 block text-sm font-bold text-gray-700">Seleccionar Módulo:</label>
         <select
           value={moduloSeleccionado}
           onChange={(event) =>
@@ -154,7 +175,7 @@ const EspecificacionesModuloPage = () => {
           disabled={isLoadingModulos}
         >
           <option value="" disabled>
-            -- Elige un Modulo --
+            -- Elige un Módulo --
           </option>
           {modulos.map((modulo) => (
             <option key={modulo.id} value={modulo.id}>
@@ -166,7 +187,7 @@ const EspecificacionesModuloPage = () => {
 
       {(isErrorModulos || isErrorCategorias || isErrorCompetencias) && (
         <section className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
-          {errorText ?? 'No fue posible cargar la informacion de especificaciones.'}
+          {errorText ?? 'No fue posible cargar la información de especificaciones.'}
         </section>
       )}
 
@@ -185,14 +206,14 @@ const EspecificacionesModuloPage = () => {
       {moduloSeleccionado !== '' && (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <section className="rounded-xl border border-usco-ocre/70 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-xl font-bold text-usco-vino">Categorias o Contenidos</h2>
+            <h2 className="mb-4 text-xl font-bold text-usco-vino">Categorías o Contenidos</h2>
 
             <div className="mb-4 flex items-center gap-2">
               <input
                 type="text"
                 value={nuevaCategoria}
                 onChange={(event) => setNuevaCategoria(event.target.value)}
-                placeholder="Nueva categoria"
+                placeholder="Nueva categoría"
                 className="w-full rounded-lg border border-gray-300 p-2 text-sm focus:border-usco-vino focus:ring-usco-vino"
               />
               <button
@@ -200,19 +221,19 @@ const EspecificacionesModuloPage = () => {
                 onClick={handleCrearCategoria}
                 disabled={crearCategoriaMutation.isPending || !nuevaCategoria.trim()}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-usco-vino text-white transition hover:bg-[#741017] disabled:cursor-not-allowed disabled:opacity-50"
-                title="Agregar categoria"
+                title="Agregar categoría"
               >
                 <Plus className="h-4 w-4" />
               </button>
             </div>
 
             {isLoadingCategorias ? (
-              <p className="text-sm text-usco-gris">Cargando categorias...</p>
+              <p className="text-sm text-usco-gris">Cargando categorías...</p>
             ) : (
               <ul className="space-y-2">
                 {categorias.length === 0 && (
                   <li className="rounded-lg border border-gray-200 p-3 text-sm text-usco-gris">
-                    No hay categorias registradas para este modulo.
+                    No hay categorías registradas para este módulo.
                   </li>
                 )}
                 {categorias.map((categoria) => (
@@ -225,7 +246,7 @@ const EspecificacionesModuloPage = () => {
                       type="button"
                       onClick={() => eliminarCategoriaMutation.mutate(categoria.id)}
                       className="rounded p-1 text-red-500 transition hover:bg-red-50 hover:text-red-700"
-                      title="Eliminar categoria"
+                      title="Eliminar categoría"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -263,7 +284,7 @@ const EspecificacionesModuloPage = () => {
               <ul className="space-y-2">
                 {competencias.length === 0 && (
                   <li className="rounded-lg border border-gray-200 p-3 text-sm text-usco-gris">
-                    No hay competencias registradas para este modulo.
+                    No hay competencias registradas para este módulo.
                   </li>
                 )}
                 {competencias.map((competencia) => (

@@ -27,6 +27,10 @@ export interface ActualizarPreguntaResult {
 
 export interface CargaMasivaPreguntasResponse {
   status: string
+  mensaje?: string
+  creadas?: number
+  omitidas?: number
+  sin_ia_por_error?: number
   preguntas_creadas: number
   filas_con_ia: number
   filas_omitidas?: number
@@ -38,6 +42,13 @@ export interface RevertirCargaMasivaResponse {
   status: string
   cantidad_eliminada: number
   mensaje: string
+}
+
+export interface EliminarPreguntaResponse {
+  status?: string
+  tipo_eliminacion?: 'logica' | 'fisica'
+  pregunta_id?: string
+  mensaje?: string
 }
 
 export interface PreguntaCriticaRow extends Pregunta {
@@ -83,7 +94,7 @@ const normalizePregunta = (pregunta: Pregunta): Pregunta => {
       ? modulo
       : {
           id: Number(pregunta.modulo_id ?? modulo ?? 0),
-          nombre: pregunta.modulo_nombre ?? `Modulo ${String(modulo ?? pregunta.modulo_id ?? '')}`,
+          nombre: pregunta.modulo_nombre ?? `Módulo ${String(modulo ?? pregunta.modulo_id ?? '')}`,
           descripcion: '',
         }
 
@@ -215,6 +226,15 @@ export const cambiarEstadoPregunta = async ({
   return response.data
 }
 
+export const eliminarPregunta = async (
+  id: number | string,
+): Promise<EliminarPreguntaResponse> => {
+  const { data } = await axiosInstance.delete<EliminarPreguntaResponse>(
+    `/evaluaciones/admin/preguntas/${id}/`,
+  )
+  return data ?? {}
+}
+
 export const generarOpcionesIA = async ({
   enunciado,
   contexto,
@@ -243,14 +263,17 @@ export const cargaMasivaPreguntas = async ({
   moduloId,
   categoriaId,
   competenciaId,
+  usarIA = true,
 }: {
   file: File
   moduloId?: number
   categoriaId?: number
   competenciaId?: number
+  usarIA?: boolean
 }): Promise<CargaMasivaPreguntasResponse> => {
   const formData = new FormData()
   formData.append('archivo', file)
+  formData.append('usar_ia', usarIA ? 'true' : 'false')
   if (typeof moduloId === 'number') {
     formData.append('modulo_id', String(moduloId))
   }
@@ -334,6 +357,7 @@ const preguntasService = {
   crearPregunta,
   actualizarPregunta,
   cambiarEstadoPregunta,
+  eliminarPregunta,
   generarOpcionesIA,
   cargaMasivaPreguntas,
   descargarPlantillaCargaMasivaPreguntas,

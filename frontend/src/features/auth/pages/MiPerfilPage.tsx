@@ -26,7 +26,7 @@ interface ApiErrorResponse {
 
 const extractErrorMessage = (error: AxiosError<ApiErrorResponse> | null): string => {
   if (!error?.response?.data) {
-    return 'No fue posible actualizar la contrasena.'
+    return 'No fue posible actualizar la contraseña.'
   }
 
   const data = error.response.data
@@ -40,7 +40,7 @@ const extractErrorMessage = (error: AxiosError<ApiErrorResponse> | null): string
     return firstField[0]
   }
 
-  return 'No fue posible actualizar la contrasena.'
+  return 'No fue posible actualizar la contraseña.'
 }
 
 const MiPerfilPage = () => {
@@ -70,7 +70,7 @@ const MiPerfilPage = () => {
     mutationFn: authService.cambiarMiPassword,
     onSuccess: () => {
       setFormMessage('')
-      setSuccessMessage('Contrasena actualizada correctamente.')
+      setSuccessMessage('Contraseña actualizada correctamente.')
       setPasswordNueva('')
       setPasswordConfirmar('')
       setShowNewPassword(false)
@@ -88,12 +88,12 @@ const MiPerfilPage = () => {
     setFormMessage('')
 
     if (!passwordNueva.trim() || !passwordConfirmar.trim()) {
-      setFormMessage('Debes completar ambos campos de contrasena.')
+      setFormMessage('Debes completar ambos campos de contraseña.')
       return
     }
 
     if (passwordNueva !== passwordConfirmar) {
-      setFormMessage('La confirmacion de contrasena no coincide.')
+      setFormMessage('La confirmación de contraseña no coincide.')
       return
     }
 
@@ -109,9 +109,9 @@ const MiPerfilPage = () => {
 
   const passwordChecks = useMemo(
     () => [
-      { label: 'Minimo 8 caracteres', valid: passwordNueva.length >= 8 },
-      { label: 'Al menos una letra mayuscula', valid: /[A-Z]/.test(passwordNueva) },
-      { label: 'Al menos un numero', valid: /[0-9]/.test(passwordNueva) },
+      { label: 'Mínimo 8 caracteres', valid: passwordNueva.length >= 8 },
+      { label: 'Al menos una letra mayúscula', valid: /[A-Z]/.test(passwordNueva) },
+      { label: 'Al menos un número', valid: /[0-9]/.test(passwordNueva) },
     ],
     [passwordNueva],
   )
@@ -129,7 +129,7 @@ const MiPerfilPage = () => {
       <section className="rounded-2xl border border-red-300 bg-red-50 p-6 text-sm text-red-700">
         {error?.response?.data?.detail ??
           error?.response?.data?.detalle ??
-          'No fue posible cargar la informacion del perfil.'}
+          'No fue posible cargar la información del perfil.'}
       </section>
     )
   }
@@ -137,9 +137,9 @@ const MiPerfilPage = () => {
   return (
     <section className="mx-auto w-full max-w-5xl space-y-6">
       <header>
-        <h1 className="text-4xl font-bold tracking-tight text-usco-vino">Mi Perfil</h1>
+        <h1 className="text-xl font-bold tracking-tight text-usco-vino">MI PERFIL</h1>
         <p className="mt-2 text-sm text-usco-gris">
-          Consulta tu informacion institucional y administra tu seguridad de acceso.
+          Consulta tu información institucional y administra tu seguridad de acceso.
         </p>
       </header>
 
@@ -149,7 +149,7 @@ const MiPerfilPage = () => {
             <UserCircle2 className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-usco-vino">Informacion Personal</h2>
+            <h2 className="text-lg font-bold text-usco-vino">Información Personal</h2>
             <p className="text-sm text-usco-gris">Estos datos son de solo lectura.</p>
           </div>
         </div>
@@ -204,7 +204,7 @@ const MiPerfilPage = () => {
                 <ShieldCheck className="h-6 w-6" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-usco-vino">Cambiar Contrasena</h2>
+                <h2 className="text-lg font-bold text-usco-vino">Cambiar Contraseña</h2>
                 <p className="text-sm text-usco-gris">Actualiza tu credencial de acceso seguro.</p>
               </div>
             </div>
@@ -227,7 +227,7 @@ const MiPerfilPage = () => {
                 <label className="block space-y-2">
                   <span className="flex items-center gap-2 text-sm font-semibold text-usco-gris">
                     <KeyRound className="h-4 w-4 text-usco-vino" />
-                    Contrasena Nueva
+                    Contraseña Nueva
                   </span>
                   <div className="relative">
                     <input
@@ -235,7 +235,7 @@ const MiPerfilPage = () => {
                       value={passwordNueva}
                       onChange={(event) => setPasswordNueva(event.target.value)}
                       className="h-12 w-full rounded-xl border border-usco-ocre/80 bg-white/90 px-3 pr-12 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
-                      placeholder="Ingresa la nueva contrasena"
+                      placeholder="Ingresa la nueva contraseña"
                       required
                     />
                     <button
@@ -251,7 +251,7 @@ const MiPerfilPage = () => {
                 <label className="block space-y-2">
                   <span className="flex items-center gap-2 text-sm font-semibold text-usco-gris">
                     <KeyRound className="h-4 w-4 text-usco-vino" />
-                    Confirmar Contrasena
+                    Confirmar Contraseña
                   </span>
                   <div className="relative">
                     <input
@@ -259,7 +259,7 @@ const MiPerfilPage = () => {
                       value={passwordConfirmar}
                       onChange={(event) => setPasswordConfirmar(event.target.value)}
                       className="h-12 w-full rounded-xl border border-usco-ocre/80 bg-white/90 px-3 pr-12 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
-                      placeholder="Confirma la nueva contrasena"
+                      placeholder="Confirma la nueva contraseña"
                       required
                     />
                     <button
@@ -278,7 +278,7 @@ const MiPerfilPage = () => {
 
                 <section className="rounded-xl border border-usco-ocre/80 bg-usco-fondo/70 p-4">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-usco-vino">
-                    Requisitos de contrasena
+                    Requisitos de contraseña
                   </p>
                   <ul className="space-y-1.5 text-sm text-usco-gris">
                     {passwordChecks.map((check) => (
@@ -305,7 +305,7 @@ const MiPerfilPage = () => {
                   </section>
                 )}
                 {passwordConfirmar && passwordNueva !== passwordConfirmar && (
-                  <p className="text-center text-sm text-red-700">Las contrasenas no coinciden.</p>
+                  <p className="text-center text-sm text-red-700">Las contraseñas no coinciden.</p>
                 )}
 
                 <button
@@ -318,7 +318,7 @@ const MiPerfilPage = () => {
                   }
                   className="h-12 w-full rounded-xl bg-gradient-to-r from-usco-vino to-[#741017] px-5 text-sm font-semibold text-white transition hover:from-[#741017] hover:to-usco-vino disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {cambiarPasswordMutation.isPending ? 'Actualizando...' : 'Actualizar Contrasena'}
+                  {cambiarPasswordMutation.isPending ? 'Actualizando...' : 'Actualizar Contraseña'}
                 </button>
               </form>
             </div>

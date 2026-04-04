@@ -1,3 +1,6 @@
+import io
+import re
+
 import pandas as pd
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -12,17 +15,20 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import ProgramaAcademico, Usuario
+from .models import Notificacion, ProgramaAcademico, Usuario
 from .serializers import (
     ActualizarMiPasswordSerializer,
     CambiarPasswordSerializer,
     CustomTokenObtainPairSerializer,
     MiPerfilSerializer,
+    NotificacionSerializer,
     ProgramaAcademicoSerializer,
     UsuarioCreateSerializer,
     UsuarioListadoSerializer,
     validate_new_password_rules,
 )
+
+SOLO_LETRAS_REGEX = re.compile(r'^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]+$')
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -111,6 +117,29 @@ class CargaMasivaUsuariosView(APIView):
             return None
         return semestre if semestre > 0 else None
 
+    @staticmethod
+    def _read_csv_uploaded_file(uploaded_file):
+        """
+        Convierte el archivo subido (bytes) a texto para evitar errores del csv.Sniffer
+        con streams binarios en pandas.read_csv(..., sep=None, engine='python').
+        """
+        raw_bytes = uploaded_file.read()
+        uploaded_file.seek(0)
+
+        if not raw_bytes:
+            raise ValueError('El archivo CSV esta vacio.')
+
+        last_error = None
+        for encoding in ('utf-8-sig', 'utf-8', 'latin-1'):
+            try:
+                text = raw_bytes.decode(encoding)
+                return pd.read_csv(io.StringIO(text), sep=None, engine='python')
+            except UnicodeDecodeError as exc:
+                last_error = exc
+                continue
+
+        raise ValueError(f'No se pudo decodificar el archivo CSV: {last_error}')
+
     def post(self, request):
         if getattr(request.user, 'rol', None) != Usuario.ROL_ADMIN:
             return Response(
@@ -127,14 +156,21 @@ class CargaMasivaUsuariosView(APIView):
 
         nombre_archivo = archivo.name.lower()
 
-        if nombre_archivo.endswith('.xlsx'):
-            df = pd.read_excel(archivo)
-        elif nombre_archivo.endswith('.csv'):
-            # Detecta delimitador automaticamente (coma, punto y coma, tab, etc.)
-            df = pd.read_csv(archivo, sep=None, engine='python')
-        else:
+        try:
+            if nombre_archivo.endswith('.xlsx'):
+                df = pd.read_excel(archivo)
+            elif nombre_archivo.endswith('.csv'):
+                # Detecta delimitador automaticamente (coma, punto y coma, tab, etc.)
+                # usando stream de texto, no bytes.
+                df = self._read_csv_uploaded_file(archivo)
+            else:
+                return Response(
+                    {'detalle': 'Formato de archivo no soportado. Usa .xlsx o .csv.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except Exception as exc:
             return Response(
-                {'detalle': 'Formato de archivo no soportado. Usa .xlsx o .csv.'},
+                {'detalle': f'No se pudo leer el archivo de carga: {exc}'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -206,10 +242,30 @@ class CargaMasivaUsuariosView(APIView):
                             correo_institucional,
                             nombre_programa,
                         ]
-                    ):
+                        ):
                         raise ValueError(
                             'Faltan campos obligatorios: documento, tipo_documento, nombres, '
                             'apellidos, correo_institucional, programa.'
+                        )
+
+                    nombres = ' '.join(nombres.split())
+                    apellidos = ' '.join(apellidos.split())
+
+                    if not SOLO_LETRAS_REGEX.fullmatch(nombres):
+                        raise ValueError('Nombres invalidos: solo se permiten letras.')
+                    if not SOLO_LETRAS_REGEX.fullmatch(apellidos):
+                        raise ValueError('Apellidos invalidos: solo se permiten letras.')
+
+                    if not documento.isdigit():
+                        raise ValueError('Documento invalido: solo se permiten numeros.')
+                    if len(documento) > 10:
+                        raise ValueError(
+                            'Documento invalido: debe tener maximo 10 digitos.',
+                        )
+
+                    if not correo_institucional.endswith('@usco.edu.co'):
+                        raise ValueError(
+                            'Correo institucional invalido: debe terminar en @usco.edu.co.',
                         )
 
                     if documento in documentos_existentes:
@@ -343,6 +399,50 @@ class MiPerfilView(APIView):
         return Response({'mensaje': 'Contrasena actualizada con exito.'}, status=status.HTTP_200_OK)
 
 
+class NotificacionesListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        limite_raw = str(request.query_params.get('limit') or '').strip()
+        try:
+            limite = int(limite_raw) if limite_raw else 20
+        except ValueError:
+            limite = 20
+
+        limite = max(1, min(limite, 100))
+        notificaciones = Notificacion.objects.filter(usuario=request.user).order_by('-created_at')[:limite]
+        serializer = NotificacionSerializer(notificaciones, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        ids = request.data.get('ids')
+        marcar_todas_raw = request.data.get('marcar_todas')
+        if isinstance(marcar_todas_raw, bool):
+            marcar_todas = marcar_todas_raw
+        else:
+            marcar_todas = str(marcar_todas_raw or '').strip().lower() in {'1', 'true', 'yes', 'si'}
+
+        queryset = Notificacion.objects.filter(usuario=request.user, leida=False)
+        if not marcar_todas:
+            if not isinstance(ids, list) or len(ids) == 0:
+                return Response(
+                    {'detalle': "Envia 'ids' (lista) o 'marcar_todas': true."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            queryset = queryset.filter(id__in=ids)
+
+        actualizadas = queryset.update(leida=True)
+        return Response({'actualizadas': actualizadas}, status=status.HTTP_200_OK)
+
+
+class NotificacionesContadorView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        no_leidas = Notificacion.objects.filter(usuario=request.user, leida=False).count()
+        return Response({'no_leidas': no_leidas}, status=status.HTTP_200_OK)
+
+
 class UsuariosEstadoUpdateView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
@@ -436,15 +536,42 @@ class UsuariosEstadoUpdateView(APIView):
 
         if requiere_actualizacion_perfil:
             if 'nombres' in payload:
-                usuario.nombres = str(payload.get('nombres') or '').strip().upper()
+                nombres = ' '.join(str(payload.get('nombres') or '').strip().split())
+                if not nombres or not all(char.isalpha() or char.isspace() for char in nombres):
+                    return Response(
+                        {'nombres': ['Los nombres solo deben contener letras.']},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                usuario.nombres = nombres.upper()
                 update_fields.append('nombres')
 
             if 'apellidos' in payload:
-                usuario.apellidos = str(payload.get('apellidos') or '').strip().upper()
+                apellidos = ' '.join(str(payload.get('apellidos') or '').strip().split())
+                if not apellidos or not all(char.isalpha() or char.isspace() for char in apellidos):
+                    return Response(
+                        {'apellidos': ['Los apellidos solo deben contener letras.']},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                usuario.apellidos = apellidos.upper()
                 update_fields.append('apellidos')
 
             if 'correo_institucional' in payload:
-                usuario.correo_institucional = str(payload.get('correo_institucional') or '').strip().lower()
+                correo = str(payload.get('correo_institucional') or '').strip().lower()
+                if not correo.endswith('@usco.edu.co'):
+                    return Response(
+                        {
+                            'correo_institucional': [
+                                'El correo institucional debe terminar en @usco.edu.co.',
+                            ],
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if Usuario.objects.filter(correo_institucional__iexact=correo).exclude(id=usuario.id).exists():
+                    return Response(
+                        {'correo_institucional': ['Ya existe un usuario con este correo institucional.']},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                usuario.correo_institucional = correo
                 update_fields.append('correo_institucional')
 
             if 'tipo_documento' in payload:
@@ -453,7 +580,23 @@ class UsuariosEstadoUpdateView(APIView):
 
             if 'numero_documento' in payload or 'documento' in payload:
                 documento = payload.get('numero_documento', payload.get('documento'))
-                usuario.documento = str(documento or '').strip().upper()
+                documento_text = str(documento or '').strip()
+                if not documento_text.isdigit():
+                    return Response(
+                        {'numero_documento': ['El numero de documento solo debe contener numeros.']},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if len(documento_text) > 10:
+                    return Response(
+                        {'numero_documento': ['El numero de documento debe tener maximo 10 digitos.']},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if Usuario.objects.filter(documento__iexact=documento_text).exclude(id=usuario.id).exists():
+                    return Response(
+                        {'numero_documento': ['Ya existe un usuario con este numero de documento.']},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                usuario.documento = documento_text
                 update_fields.append('documento')
 
             if 'rol' in payload:

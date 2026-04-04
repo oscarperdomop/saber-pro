@@ -48,6 +48,8 @@ const initialFormValues: FormValues = {
   nueva_password: '',
 }
 
+const SOLO_LETRAS_REGEX = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]+$/
+
 const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuarioModalProps) => {
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues)
   const [errorMessage, setErrorMessage] = useState('')
@@ -103,7 +105,23 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
   })
 
   const handleChange = (field: Exclude<keyof FormValues, 'is_staff'>, value: string) => {
-    setFormValues((current) => ({ ...current, [field]: value }))
+    setFormValues((current) => {
+      if (field === 'nombres' || field === 'apellidos') {
+        const sanitized = value.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]/g, '')
+        return { ...current, [field]: sanitized }
+      }
+
+      if (field === 'numero_documento') {
+        const sanitized = value.replace(/\D/g, '').slice(0, 10)
+        return { ...current, numero_documento: sanitized }
+      }
+
+      if (field === 'correo_institucional') {
+        return { ...current, correo_institucional: value.toLowerCase() }
+      }
+
+      return { ...current, [field]: value }
+    })
   }
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -120,7 +138,7 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
       apellidos: formValues.apellidos.trim().toUpperCase(),
       correo_institucional: formValues.correo_institucional.trim().toLowerCase(),
       tipo_documento: formValues.tipo_documento.trim().toUpperCase(),
-      numero_documento: formValues.numero_documento.trim().toUpperCase(),
+      numero_documento: formValues.numero_documento.trim(),
       rol: formValues.rol,
       is_staff: formValues.is_staff,
       programa_id: formValues.programa_id,
@@ -134,7 +152,7 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
       apellidos: (usuario.apellidos ?? '').trim().toUpperCase(),
       correo_institucional: (usuario.correo_institucional ?? '').trim().toLowerCase(),
       tipo_documento: (usuario.tipo_documento ?? '').trim().toUpperCase(),
-      numero_documento: (usuario.numero_documento ?? '').trim().toUpperCase(),
+      numero_documento: (usuario.numero_documento ?? '').trim(),
       rol: usuario.rol ?? 'ESTUDIANTE',
       is_staff: Boolean(usuario.is_staff),
       programa_id: usuario.programa_id ? String(usuario.programa_id) : '',
@@ -161,6 +179,26 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
     if (!hasChanges) {
       onNotify({ type: 'info', message: 'Sin cambios por guardar.' })
       onClose()
+      return
+    }
+
+    if (!SOLO_LETRAS_REGEX.test(formValues.nombres.trim())) {
+      setErrorMessage('El campo Nombres solo permite letras.')
+      return
+    }
+
+    if (!SOLO_LETRAS_REGEX.test(formValues.apellidos.trim())) {
+      setErrorMessage('El campo Apellidos solo permite letras.')
+      return
+    }
+
+    if (!normalizedCurrent.correo_institucional.endsWith('@usco.edu.co')) {
+      setErrorMessage('El correo institucional debe terminar en @usco.edu.co.')
+      return
+    }
+
+    if (!/^\d{1,10}$/.test(normalizedCurrent.numero_documento)) {
+      setErrorMessage('El número de documento debe contener solo números y máximo 10 dígitos.')
       return
     }
 
@@ -209,8 +247,8 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-[500px] max-w-full rounded-lg bg-white p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-3 sm:p-4">
+      <div className="mx-auto my-2 w-[500px] max-w-full max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-lg bg-white p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl sm:my-6 sm:p-6">
         <h2 className="text-xl font-bold text-usco-vino">Editar Usuario</h2>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
@@ -221,6 +259,7 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
                 type="text"
                 value={formValues.nombres}
                 onChange={(event) => handleChange('nombres', event.target.value)}
+                pattern="[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+"
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               />
@@ -232,6 +271,7 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
                 type="text"
                 value={formValues.apellidos}
                 onChange={(event) => handleChange('apellidos', event.target.value)}
+                pattern="[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+"
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               />
@@ -245,6 +285,7 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
                 type="email"
                 value={formValues.correo_institucional}
                 onChange={(event) => handleChange('correo_institucional', event.target.value)}
+                pattern="^[^@\\s]+@usco\\.edu\\.co$"
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               />
@@ -325,19 +366,22 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
 
             <label className="col-span-1">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">
-                Numero de Documento
+                Número de Documento
               </span>
               <input
                 type="text"
                 value={formValues.numero_documento}
                 onChange={(event) => handleChange('numero_documento', event.target.value)}
+                inputMode="numeric"
+                pattern="\d{1,10}"
+                maxLength={10}
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               />
             </label>
 
             <label className="col-span-1">
-              <span className="mb-1 block text-sm font-semibold text-usco-gris">Genero</span>
+              <span className="mb-1 block text-sm font-semibold text-usco-gris">Género</span>
               <select
                 value={formValues.genero}
                 onChange={(event) => handleChange('genero', event.target.value)}
@@ -369,7 +413,7 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
 
           <div className="mt-1 border-t border-usco-ocre/60 pt-4">
             <label className="block text-sm font-medium text-usco-gris">
-              Restablecer Contrasena (Opcional)
+              Restablecer Contraseña (Opcional)
             </label>
             <input
               type="text"
@@ -379,7 +423,7 @@ const EditarUsuarioModal = ({ isOpen, onClose, usuario, onNotify }: EditarUsuari
               className="mt-1 block w-full rounded-md border border-usco-ocre/80 p-2 text-sm text-usco-gris shadow-sm focus:border-usco-vino focus:ring-usco-vino"
             />
             <p className="mt-1 text-xs text-usco-gris/80">
-              Si escribes una clave aqui, reemplazara la actual del estudiante.
+              Si escribes una clave aquí, reemplazará la actual del estudiante.
             </p>
           </div>
 

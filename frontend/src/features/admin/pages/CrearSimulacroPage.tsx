@@ -237,13 +237,13 @@ const CrearSimulacroPage = () => {
     }
 
     if (reglas.length === 0) {
-      window.alert('Debes agregar al menos un modulo.')
+      window.alert('Debes agregar al menos un módulo.')
       return
     }
 
     const hayModulosSinSeleccionar = reglas.some((regla) => regla.modulo_id === '')
     if (hayModulosSinSeleccionar) {
-      window.alert('Todas las reglas deben tener un modulo seleccionado.')
+      window.alert('Todas las reglas deben tener un módulo seleccionado.')
       return
     }
 
@@ -251,7 +251,7 @@ const CrearSimulacroPage = () => {
       (regla) => regla.cantidad_facil + regla.cantidad_media + regla.cantidad_alta === 0,
     )
     if (reglaConTotalCero) {
-      window.alert('Cada modulo debe tener al menos una pregunta en total.')
+      window.alert('Cada módulo debe tener al menos una pregunta en total.')
       return
     }
 
@@ -439,7 +439,7 @@ const CrearSimulacroPage = () => {
 
           {isLoadingModulos && (
             <p className="rounded-xl border border-usco-ocre/70 bg-white p-3 text-sm text-usco-gris">
-              Cargando modulos...
+              Cargando módulos...
             </p>
           )}
 
@@ -447,13 +447,13 @@ const CrearSimulacroPage = () => {
             <p className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
               {modulosError.response?.data?.detail ??
                 modulosError.response?.data?.detalle ??
-                'No fue posible cargar los modulos.'}
+                'No fue posible cargar los módulos.'}
             </p>
           )}
 
           {!isLoadingModulos && !isErrorModulos && reglas.length === 0 && (
             <p className="rounded-xl border border-usco-ocre/70 bg-usco-fondo/60 p-3 text-sm text-usco-gris">
-              Aun no has agregado modulos para este simulacro.
+              Aún no has agregado módulos para este simulacro.
             </p>
           )}
 
@@ -465,13 +465,13 @@ const CrearSimulacroPage = () => {
                 <div key={`${String(regla.modulo_id)}-${index}`} className="rounded-lg border border-usco-ocre/70 bg-white p-3 shadow-sm">
                   <div className="flex flex-col gap-3 md:flex-row md:items-end">
                     <label className="block flex-1">
-                      <span className="mb-1 block text-sm font-semibold text-usco-gris">Modulo</span>
+                      <span className="mb-1 block text-sm font-semibold text-usco-gris">Módulo</span>
                       <select
                         value={regla.modulo_id === '' ? '' : String(regla.modulo_id)}
                         onChange={(event) => actualizarRegla(index, 'modulo_id', event.target.value)}
                         className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                       >
-                        <option value="">Selecciona un modulo</option>
+                        <option value="">Selecciona un módulo</option>
                         {modulos.map((modulo) => (
                           <option key={modulo.id} value={modulo.id}>
                             {modulo.nombre}
@@ -583,7 +583,7 @@ const CrearSimulacroPage = () => {
             disabled={isLoadingModulos || isErrorModulos || modulos.length === 0}
             className="rounded-xl border border-usco-vino px-4 py-2 text-sm font-semibold text-usco-vino transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            + Agregar Modulo al Examen
+            + Agregar Módulo al Examen
           </button>
         </section>
 

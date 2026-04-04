@@ -47,6 +47,8 @@ const initialFormValues: FormValues = {
   password: '',
 }
 
+const SOLO_LETRAS_REGEX = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]+$/
+
 const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps) => {
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues)
   const [errorMessage, setErrorMessage] = useState('')
@@ -118,6 +120,20 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
         }
       }
 
+      if (field === 'nombres' || field === 'apellidos') {
+        const sanitized = value.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]/g, '')
+        return { ...current, [field]: sanitized }
+      }
+
+      if (field === 'numero_documento') {
+        const sanitized = value.replace(/\D/g, '').slice(0, 10)
+        return { ...current, numero_documento: sanitized }
+      }
+
+      if (field === 'correo_institucional') {
+        return { ...current, correo_institucional: value.toLowerCase() }
+      }
+
       return { ...current, [field]: value }
     })
   }
@@ -131,7 +147,7 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
       apellidos: formValues.apellidos.trim().toUpperCase(),
       correo_institucional: formValues.correo_institucional.trim().toLowerCase(),
       tipo_documento: formValues.tipo_documento.trim().toUpperCase(),
-      numero_documento: formValues.numero_documento.trim().toUpperCase(),
+      numero_documento: formValues.numero_documento.trim(),
       rol: formValues.rol,
       is_staff: formValues.rol === 'PROFESOR' ? formValues.is_staff : formValues.rol === 'ADMIN',
       programa_id: formValues.programa_id,
@@ -149,6 +165,26 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
       !formValues.programa_id
     ) {
       setErrorMessage('Completa todos los campos obligatorios, incluyendo el programa.')
+      return
+    }
+
+    if (!SOLO_LETRAS_REGEX.test(formValues.nombres.trim())) {
+      setErrorMessage('El campo Nombres solo permite letras.')
+      return
+    }
+
+    if (!SOLO_LETRAS_REGEX.test(formValues.apellidos.trim())) {
+      setErrorMessage('El campo Apellidos solo permite letras.')
+      return
+    }
+
+    if (!payload.correo_institucional.endsWith('@usco.edu.co')) {
+      setErrorMessage('El correo institucional debe terminar en @usco.edu.co.')
+      return
+    }
+
+    if (!/^\d{1,10}$/.test(payload.numero_documento)) {
+      setErrorMessage('El número de documento debe contener solo números y máximo 10 dígitos.')
       return
     }
 
@@ -182,8 +218,8 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-[560px] max-w-full rounded-lg bg-white p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-3 sm:p-4">
+      <div className="mx-auto my-2 w-[560px] max-w-full max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-lg bg-white p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl sm:my-6 sm:p-6">
         <h2 className="text-xl font-bold text-usco-vino">Nuevo Usuario</h2>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
@@ -194,6 +230,7 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
                 type="text"
                 value={formValues.nombres}
                 onChange={(event) => handleChange('nombres', event.target.value)}
+                pattern="[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+"
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               />
@@ -205,6 +242,7 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
                 type="text"
                 value={formValues.apellidos}
                 onChange={(event) => handleChange('apellidos', event.target.value)}
+                pattern="[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+"
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               />
@@ -218,6 +256,7 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
                 type="email"
                 value={formValues.correo_institucional}
                 onChange={(event) => handleChange('correo_institucional', event.target.value)}
+                pattern="^[^@\\s]+@usco\\.edu\\.co$"
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               />
@@ -241,12 +280,15 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
 
             <label className="col-span-1">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">
-                Numero de Documento
+                Número de Documento
               </span>
               <input
                 type="text"
                 value={formValues.numero_documento}
                 onChange={(event) => handleChange('numero_documento', event.target.value)}
+                inputMode="numeric"
+                pattern="\d{1,10}"
+                maxLength={10}
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               />
@@ -302,7 +344,7 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
             </label>
 
             <label className="col-span-1">
-              <span className="mb-1 block text-sm font-semibold text-usco-gris">Genero</span>
+              <span className="mb-1 block text-sm font-semibold text-usco-gris">Género</span>
               <select
                 value={formValues.genero}
                 onChange={(event) => handleChange('genero', event.target.value)}
@@ -333,14 +375,14 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
 
             <label className="col-span-1">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">
-                Contrasena Inicial (Opcional)
+                Contraseña Inicial (Opcional)
               </span>
               <input
                 type="text"
                 value={formValues.password}
                 onChange={(event) => handleChange('password', event.target.value)}
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
-                placeholder="Si lo dejas vacio, se usa el documento"
+                placeholder="Si lo dejas vacío, se usa el documento"
               />
             </label>
           </div>

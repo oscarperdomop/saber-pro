@@ -1,9 +1,13 @@
+import re
+
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from .models import ProgramaAcademico, Usuario
+from .models import Notificacion, ProgramaAcademico, Usuario
+
+SOLO_LETRAS_REGEX = re.compile(r'^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]+$')
 
 
 def validate_new_password_rules(user, value):
@@ -150,13 +154,39 @@ class UsuarioCreateSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
-        attrs['nombres'] = str(attrs.get('nombres', '')).strip().upper()
-        attrs['apellidos'] = str(attrs.get('apellidos', '')).strip().upper()
+        nombres = ' '.join(str(attrs.get('nombres', '')).strip().split())
+        apellidos = ' '.join(str(attrs.get('apellidos', '')).strip().split())
+
+        if not SOLO_LETRAS_REGEX.fullmatch(nombres):
+            raise serializers.ValidationError(
+                {'nombres': ['Los nombres solo deben contener letras.']},
+            )
+
+        if not SOLO_LETRAS_REGEX.fullmatch(apellidos):
+            raise serializers.ValidationError(
+                {'apellidos': ['Los apellidos solo deben contener letras.']},
+            )
+
+        attrs['nombres'] = nombres.upper()
+        attrs['apellidos'] = apellidos.upper()
         attrs['tipo_documento'] = str(attrs.get('tipo_documento', '')).strip().upper()
         attrs['correo_institucional'] = str(attrs.get('correo_institucional', '')).strip().lower()
         attrs['rol'] = str(attrs.get('rol', Usuario.ROL_ESTUDIANTE)).strip().upper()
 
-        documento = str(attrs.get('documento', '')).strip().upper()
+        if not attrs['correo_institucional'].endswith('@usco.edu.co'):
+            raise serializers.ValidationError(
+                {'correo_institucional': ['El correo institucional debe terminar en @usco.edu.co.']},
+            )
+
+        documento = str(attrs.get('documento', '')).strip()
+        if not documento.isdigit():
+            raise serializers.ValidationError(
+                {'numero_documento': ['El numero de documento solo debe contener numeros.']},
+            )
+        if len(documento) > 10:
+            raise serializers.ValidationError(
+                {'numero_documento': ['El numero de documento debe tener maximo 10 digitos.']},
+            )
         attrs['documento'] = documento
 
         if Usuario.objects.filter(correo_institucional__iexact=attrs['correo_institucional']).exists():
@@ -247,3 +277,9 @@ class ProgramaAcademicoSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProgramaAcademico
         fields = ['id', 'nombre']
+
+
+class NotificacionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notificacion
+        fields = ['id', 'tipo', 'mensaje', 'leida', 'created_at']

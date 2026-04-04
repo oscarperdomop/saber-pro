@@ -31,6 +31,7 @@ interface ApiErrorResponse {
 }
 
 const ULTIMO_LOTE_STORAGE_KEY = 'preguntas_carga_masiva_ultimo_lote'
+const PAGE_SIZE = 10
 
 const safeDecode = (value: string): string => {
   try {
@@ -54,10 +55,10 @@ const getModuloNombre = (pregunta: Pregunta): string => {
   }
 
   if (pregunta.modulo_id) {
-    return `Modulo ${pregunta.modulo_id}`
+    return `Módulo ${pregunta.modulo_id}`
   }
 
-  return `Modulo ${String(pregunta.modulo)}`
+  return `Módulo ${String(pregunta.modulo)}`
 }
 
 const getTipoBadge = (tipo: string) => {
@@ -125,6 +126,7 @@ const PreguntasModuloPage = () => {
   const [isCargaMasivaOpen, setIsCargaMasivaOpen] = useState(false)
   const [ultimoLote, setUltimoLote] = useState<string | null>(null)
   const [lotePendienteRevertir, setLotePendienteRevertir] = useState<string | null>(null)
+  const [preguntaPendienteEliminar, setPreguntaPendienteEliminar] = useState<Pregunta | null>(null)
   const [resumenUltimoLote, setResumenUltimoLote] = useState<{
     preguntasCreadas: number
     filasConIA: number
@@ -138,6 +140,7 @@ const PreguntasModuloPage = () => {
   const [ordenFiltro, setOrdenFiltro] = useState<
     'recientes' | 'antiguas' | 'dificultad' | 'enunciado_az'
   >('recientes')
+  const [currentPage, setCurrentPage] = useState(1)
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(
     null,
   )
@@ -215,6 +218,28 @@ const PreguntasModuloPage = () => {
     },
   })
 
+  const eliminarPreguntaMutation = useMutation({
+    mutationFn: preguntasService.eliminarPregunta,
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['preguntas'] })
+      const tipoEliminacion = response?.tipo_eliminacion
+      const mensajeFallback =
+        tipoEliminacion === 'fisica'
+          ? 'Pregunta eliminada permanentemente.'
+          : 'Pregunta archivada correctamente.'
+      setNotification({
+        type: 'success',
+        message: response?.mensaje ?? mensajeFallback,
+      })
+    },
+    onError: () => {
+      setNotification({
+        type: 'info',
+        message: 'No fue posible eliminar la pregunta en este momento.',
+      })
+    },
+  })
+
   const preguntasModulo = useMemo(
     () =>
       preguntas.filter(
@@ -264,6 +289,14 @@ const PreguntasModuloPage = () => {
     return preguntas.filter((pregunta) => lookup.has(String(pregunta.id)))
   }, [preguntas, seleccionadas])
 
+  const totalFiltradas = preguntasFiltradas.length
+  const totalPages = Math.max(1, Math.ceil(totalFiltradas / PAGE_SIZE))
+
+  const preguntasPaginadas = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return preguntasFiltradas.slice(start, start + PAGE_SIZE)
+  }, [currentPage, preguntasFiltradas])
+
   const moduloPreseleccionado = useMemo(() => {
     if (preguntasModulo.length > 0 && preguntasModulo[0].modulo_id) {
       return Number(preguntasModulo[0].modulo_id)
@@ -306,6 +339,16 @@ const PreguntasModuloPage = () => {
     }
   }, [seleccionadas.length])
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [moduloActual, searchTerm, estadoFiltro, tipoFiltro, ordenFiltro, mostrarArchivadas])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
   const toggleSeleccion = (preguntaId: string) => {
     setSeleccionadas((prev) => {
       const yaSeleccionada = prev.includes(preguntaId)
@@ -327,11 +370,11 @@ const PreguntasModuloPage = () => {
   }
 
   const todosSeleccionados =
-    preguntasFiltradas.length > 0 &&
-    preguntasFiltradas.every((pregunta) => seleccionadas.includes(String(pregunta.id)))
+    preguntasPaginadas.length > 0 &&
+    preguntasPaginadas.every((pregunta) => seleccionadas.includes(String(pregunta.id)))
 
   const toggleSeleccionTodos = () => {
-    const idsFiltrados = preguntasFiltradas.map((pregunta) => String(pregunta.id))
+    const idsFiltrados = preguntasPaginadas.map((pregunta) => String(pregunta.id))
 
     if (todosSeleccionados) {
       setSeleccionadas((prev) => prev.filter((id) => !idsFiltrados.includes(id)))
@@ -397,10 +440,20 @@ const PreguntasModuloPage = () => {
     revertirCargaMutation.mutate(loteId)
   }
 
+  const confirmarEliminarPregunta = () => {
+    if (!preguntaPendienteEliminar) {
+      return
+    }
+
+    const preguntaId = preguntaPendienteEliminar.id
+    setPreguntaPendienteEliminar(null)
+    eliminarPreguntaMutation.mutate(preguntaId)
+  }
+
   if (isLoading) {
     return (
       <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-usco-gris shadow-sm">
-        Cargando preguntas del modulo...
+        Cargando preguntas del módulo...
       </section>
     )
   }
@@ -410,13 +463,13 @@ const PreguntasModuloPage = () => {
       <section className="rounded-xl border border-red-300 bg-red-50 p-6 text-sm text-red-700">
         {error.response?.data?.detail ??
           error.response?.data?.detalle ??
-          'No fue posible cargar las preguntas del modulo.'}
+          'No fue posible cargar las preguntas del módulo.'}
       </section>
     )
   }
 
   return (
-    <section className="mx-auto w-full max-w-7xl space-y-5">
+    <section className="bank-scope mx-auto w-full max-w-7xl space-y-5">
       <header className="flex flex-col gap-3">
         <button
           type="button"
@@ -424,7 +477,7 @@ const PreguntasModuloPage = () => {
           className="inline-flex w-fit items-center gap-2 rounded-xl border border-usco-gris/30 px-3 py-2 text-sm font-semibold text-usco-gris transition hover:border-usco-vino hover:text-usco-vino"
         >
           <ArrowLeft className="h-4 w-4" />
-          Volver a Modulos
+          Volver a Módulos
         </button>
 
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -622,7 +675,7 @@ const PreguntasModuloPage = () => {
               </tr>
             )}
 
-            {preguntasFiltradas.map((pregunta) => (
+            {preguntasPaginadas.map((pregunta) => (
               <tr key={String(pregunta.id)} className="bg-white transition hover:bg-usco-fondo/60">
                 <td className="px-3 py-3 text-center">
                   <input
@@ -739,6 +792,8 @@ const PreguntasModuloPage = () => {
                         </button>
                         <button
                           type="button"
+                          onClick={() => setPreguntaPendienteEliminar(pregunta)}
+                          disabled={eliminarPreguntaMutation.isPending}
                           className="rounded-md p-1.5 transition hover:bg-usco-fondo hover:text-red-600"
                           aria-label="Eliminar pregunta"
                         >
@@ -754,9 +809,43 @@ const PreguntasModuloPage = () => {
         </table>
       </div>
 
+      <div className="flex flex-col gap-3 rounded-2xl border border-usco-ocre/80 bg-white px-4 py-3 text-sm text-usco-gris shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <p>
+          Mostrando {preguntasPaginadas.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1} -{' '}
+          {(currentPage - 1) * PAGE_SIZE + preguntasPaginadas.length} de {totalFiltradas} preguntas.
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            disabled={currentPage === 1}
+            className="rounded-lg border border-usco-gris/30 px-3 py-1.5 font-medium text-usco-gris transition hover:border-usco-vino hover:text-usco-vino disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Anterior
+          </button>
+            <span className="px-2 font-semibold text-usco-vino">
+              Página {currentPage} de {totalPages}
+            </span>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+            disabled={currentPage >= totalPages}
+            className="rounded-lg border border-usco-gris/30 px-3 py-1.5 font-medium text-usco-gris transition hover:border-usco-vino hover:text-usco-vino disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Siguiente
+          </button>
+        </div>
+      </div>
+
       {cambiarEstadoMutation.isError && (
         <section className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
           No fue posible actualizar el estado de la pregunta.
+        </section>
+      )}
+
+      {eliminarPreguntaMutation.isError && (
+        <section className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+          No fue posible eliminar la pregunta.
         </section>
       )}
 
@@ -790,6 +879,17 @@ const PreguntasModuloPage = () => {
         isLoading={revertirCargaMutation.isPending}
         onConfirm={confirmarReversionLote}
         onCancel={() => setLotePendienteRevertir(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(preguntaPendienteEliminar)}
+        title="Eliminar pregunta"
+        message="Si la pregunta ya fue utilizada, se archivara para conservar trazabilidad. Si no ha sido utilizada, se eliminara permanentemente de la base de datos."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        isLoading={eliminarPreguntaMutation.isPending}
+        onConfirm={confirmarEliminarPregunta}
+        onCancel={() => setPreguntaPendienteEliminar(null)}
       />
     </section>
   )

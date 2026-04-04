@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -19,10 +19,23 @@ interface ModuloResumen {
   progreso: number
 }
 
+type ModulosCompletadosState = Record<string, boolean>
+
 const ModulosIntentoPage = () => {
   const { intentoId } = useParams<{ intentoId: string }>()
   const navigate = useNavigate()
   const [isFinalizarDialogOpen, setIsFinalizarDialogOpen] = useState(false)
+  const [modulosCompletados, setModulosCompletados] = useState<ModulosCompletadosState>({})
+  const modulosCompletadosKey = intentoId ? `simulacro_modulos_completados_${intentoId}` : ''
+
+  const { data: intentoData, isLoading: isLoadingIntento } = useQuery<
+    { estado: string },
+    AxiosError<ApiErrorResponse>
+  >({
+    queryKey: ['intento', intentoId],
+    queryFn: () => estudianteService.getIntentoById(intentoId as string),
+    enabled: Boolean(intentoId),
+  })
 
   const {
     data: respuestas = [],
@@ -34,6 +47,26 @@ const ModulosIntentoPage = () => {
     queryFn: () => estudianteService.getRespuestasIntento(intentoId as string),
     enabled: Boolean(intentoId),
   })
+
+  useEffect(() => {
+    if (!modulosCompletadosKey) {
+      setModulosCompletados({})
+      return
+    }
+
+    const raw = localStorage.getItem(modulosCompletadosKey)
+    if (!raw) {
+      setModulosCompletados({})
+      return
+    }
+
+    try {
+      setModulosCompletados(JSON.parse(raw) as ModulosCompletadosState)
+    } catch {
+      setModulosCompletados({})
+      localStorage.removeItem(modulosCompletadosKey)
+    }
+  }, [modulosCompletadosKey])
 
   const modulos = useMemo<ModuloResumen[]>(() => {
     const grouped = new Map<number, ModuloResumen>()
@@ -65,6 +98,16 @@ const ModulosIntentoPage = () => {
     return Array.from(grouped.values())
   }, [respuestas])
 
+  useEffect(() => {
+    if (!intentoId || isLoadingIntento || !intentoData) {
+      return
+    }
+
+    if (intentoData.estado !== 'En Progreso') {
+      navigate(`/evaluaciones/intento/${intentoId}/resultados`, { replace: true })
+    }
+  }, [intentoData, intentoId, isLoadingIntento, navigate])
+
   const progresoGeneral = useMemo<number>(() => {
     if (modulos.length === 0) {
       return 0
@@ -80,7 +123,12 @@ const ModulosIntentoPage = () => {
     return Math.round((totalRespondidas / totalPreguntas) * 100)
   }, [modulos])
 
-  const errorMessage = error?.response?.data?.detail ?? 'No fue posible cargar los modulos del intento.'
+  const todosModulosAlCien = useMemo(
+    () => modulos.length > 0 && modulos.every((modulo) => modulo.progreso === 100),
+    [modulos],
+  )
+
+  const errorMessage = error?.response?.data?.detail ?? 'No fue posible cargar los módulos del intento.'
 
   const finalizarIntentoMutation = useMutation<{ estado: string }, AxiosError<ApiErrorResponse>, string>(
     {
@@ -88,14 +136,15 @@ const ModulosIntentoPage = () => {
       onSuccess: () => {
         if (intentoId) {
           localStorage.removeItem(`simulacro_estado_${intentoId}`)
+          localStorage.removeItem(`simulacro_modulos_completados_${intentoId}`)
         }
-        navigate(`/evaluaciones/intento/${intentoId}/resultados`)
+        navigate(`/evaluaciones/intento/${intentoId}/resultados`, { replace: true })
       },
     },
   )
 
   const handleFinalizarIntento = () => {
-    if (!intentoId) {
+    if (!intentoId || !todosModulosAlCien) {
       return
     }
 
@@ -106,7 +155,7 @@ const ModulosIntentoPage = () => {
   if (!intentoId) {
     return (
       <section className="rounded-xl border border-red-300 bg-red-50 p-6 text-sm text-red-700">
-        Intento no valido.
+        Intento no válido.
       </section>
     )
   }
@@ -115,16 +164,16 @@ const ModulosIntentoPage = () => {
     <section className="mx-auto w-full max-w-6xl">
       <header className="mb-5 sm:mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-usco-vino sm:text-3xl">
-          Modulos del Simulacro
+          MÓDULOS DEL SIMULACRO
         </h1>
         <p className="mt-2 text-sm text-usco-gris">
-          Selecciona un modulo para continuar con la presentacion del examen.
+          Selecciona un módulo para continuar con la presentación del examen.
         </p>
       </header>
 
-      {isLoading && (
+      {(isLoading || isLoadingIntento) && (
         <div className="rounded-xl border border-usco-ocre/80 bg-white p-6 shadow-sm">
-          <SaberProLoader mensaje="Cargando modulos..." />
+          <SaberProLoader mensaje="Cargando módulos..." />
         </div>
       )}
 
@@ -134,13 +183,13 @@ const ModulosIntentoPage = () => {
         </div>
       )}
 
-      {!isLoading && !isError && modulos.length === 0 && (
+      {!isLoading && !isLoadingIntento && !isError && modulos.length === 0 && (
         <div className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-usco-gris shadow-sm">
-          Este intento no tiene modulos disponibles.
+          Este intento no tiene módulos disponibles.
         </div>
       )}
 
-      {!isLoading && !isError && modulos.length > 0 && (
+      {!isLoading && !isLoadingIntento && !isError && modulos.length > 0 && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-6 xl:grid-cols-3">
             {modulos.map((modulo) => (
@@ -160,6 +209,21 @@ const ModulosIntentoPage = () => {
                   />
                 </div>
                 <p className="mt-2 text-xs font-medium text-usco-gris">{modulo.progreso}% completado</p>
+                <p
+                  className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    modulosCompletados[String(modulo.moduloId)]
+                      ? 'bg-green-100 text-green-800'
+                      : modulo.progreso === 100
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-100 text-usco-gris'
+                  }`}
+                >
+                  {modulosCompletados[String(modulo.moduloId)]
+                    ? 'Módulo finalizado'
+                    : modulo.progreso === 100
+                      ? 'Listo para finalizar'
+                      : 'En progreso'}
+                </p>
 
                 <button
                   type="button"
@@ -168,7 +232,7 @@ const ModulosIntentoPage = () => {
                   }
                   className="mt-5 inline-flex items-center justify-center rounded-xl bg-usco-vino px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#741017] hover:shadow-md"
                 >
-                  Ingresar al Modulo
+                  Ingresar al Módulo
                 </button>
               </article>
             ))}
@@ -180,18 +244,29 @@ const ModulosIntentoPage = () => {
                 Progreso general
               </p>
               <p className="text-sm text-usco-gris">
-                {progresoGeneral}% completado en todos los modulos.
+                {progresoGeneral}% completado en todos los módulos.
               </p>
             </div>
 
             <button
               type="button"
               onClick={() => setIsFinalizarDialogOpen(true)}
-              disabled={finalizarIntentoMutation.isPending}
+              disabled={finalizarIntentoMutation.isPending || !todosModulosAlCien}
+              title={
+                todosModulosAlCien
+                    ? 'Todos los módulos están completos'
+                    : 'Debes completar todos los módulos para finalizar la prueba'
+              }
               className="inline-flex w-full items-center justify-center rounded-xl bg-usco-vino px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#741017] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:min-w-[220px]"
             >
               {finalizarIntentoMutation.isPending ? 'Finalizando...' : 'Finalizar Simulacro'}
             </button>
+
+            {!todosModulosAlCien && (
+              <p className="mt-3 text-sm font-medium text-usco-gris">
+                Debes completar todos los módulos para finalizar la prueba.
+              </p>
+            )}
 
             {finalizarIntentoMutation.isError && (
               <p className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">
@@ -206,8 +281,8 @@ const ModulosIntentoPage = () => {
       <ConfirmDialog
         open={isFinalizarDialogOpen}
         title="Finalizar simulacro"
-        message="Estas seguro de finalizar? Ya no podras cambiar tus respuestas."
-        confirmText="Si, finalizar"
+        message="¿Estás seguro de finalizar? Ya no podrás cambiar tus respuestas."
+        confirmText="Sí, finalizar"
         cancelText="Cancelar"
         isLoading={finalizarIntentoMutation.isPending}
         onCancel={() => setIsFinalizarDialogOpen(false)}
@@ -218,3 +293,4 @@ const ModulosIntentoPage = () => {
 }
 
 export default ModulosIntentoPage
+

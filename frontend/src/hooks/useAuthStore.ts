@@ -60,6 +60,7 @@ export const useAuthStore = () => {
     localStorage.removeItem(TOKEN_STORAGE_KEY)
     localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
     localStorage.removeItem(USER_STORAGE_KEY)
+    window.dispatchEvent(new Event('auth-changed'))
     queryClient.clear()
     navigate('/login', { replace: true })
   }

@@ -211,7 +211,7 @@ const CrearPreguntaPage = () => {
 
   const validarFormulario = (): string | null => {
     if (moduloId === '') {
-      return 'Debes seleccionar un modulo.'
+      return 'Debes seleccionar un módulo.'
     }
 
     if (!enunciado.trim()) {
@@ -219,7 +219,7 @@ const CrearPreguntaPage = () => {
     }
 
     if (categoriaId === '') {
-      return 'Debes seleccionar una categoria.'
+      return 'Debes seleccionar una categoría.'
     }
 
     if (competenciaId === '') {
@@ -374,7 +374,7 @@ const CrearPreguntaPage = () => {
   }
 
   return (
-    <section className="mx-auto w-full max-w-7xl space-y-5">
+    <section className="bank-scope mx-auto w-full max-w-7xl space-y-5">
       <header className="flex flex-col gap-3">
         <button
           type="button"
@@ -391,7 +391,7 @@ const CrearPreguntaPage = () => {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <section className="space-y-4 rounded-2xl border border-usco-ocre/80 bg-white p-5 shadow-sm">
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-usco-gris">Modulo</span>
+              <span className="mb-1 block text-sm font-semibold text-usco-gris">Módulo</span>
               <select
                 value={moduloId}
                 onChange={(event) => setModuloId(Number(event.target.value))}
@@ -400,10 +400,10 @@ const CrearPreguntaPage = () => {
                 required
               >
                 {cargandoModulos ? (
-                  <option value="">Cargando modulos...</option>
+                  <option value="">Cargando módulos...</option>
                 ) : (
                   <>
-                    <option value="">Selecciona un modulo</option>
+                    <option value="">Selecciona un módulo</option>
                     {(modulos ?? []).map((modulo) => (
                       <option key={modulo.id} value={modulo.id}>
                         {modulo.nombre}
@@ -416,7 +416,7 @@ const CrearPreguntaPage = () => {
 
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">
-                Categoria o Contenido
+                Categoría o Contenido
               </span>
               <select
                 value={categoriaId}
@@ -425,7 +425,7 @@ const CrearPreguntaPage = () => {
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15 disabled:bg-gray-100"
               >
                 <option value="" disabled>
-                  -- Selecciona una categoria --
+                  -- Selecciona una categoría --
                 </option>
                 {categorias?.map((categoria) => (
                   <option key={categoria.id} value={categoria.id}>
@@ -563,6 +563,13 @@ const CrearPreguntaPage = () => {
 
               {soporteMultimedia === 'LATEX' && (
                 <div className="mt-3 space-y-2">
+                  <p className="rounded-lg border border-usco-ocre/70 bg-white p-2 text-xs text-usco-gris">
+                    Pega unicamente el fragmento de codigo de la grafica o pregunta (por ejemplo:
+                    <span className="font-semibold"> \begin{'{'}tikzpicture{'}'}...\end{'{'}tikzpicture{'}'} </span>
+                    o <span className="font-semibold">\begin{'{'}pregunta{'}'}...\end{'{'}pregunta{'}'}</span>).
+                    No incluyas <span className="font-semibold">\documentclass</span> ni
+                    <span className="font-semibold"> \begin{'{'}document{'}'}</span>.
+                  </p>
                   <textarea
                     value={codigoLatex}
                     onChange={(event) => setCodigoLatex(event.target.value)}

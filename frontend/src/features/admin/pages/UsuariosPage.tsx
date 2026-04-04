@@ -95,7 +95,7 @@ const UsuariosPage = () => {
   return (
     <section className="mx-auto w-full max-w-7xl space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-3xl font-bold text-usco-vino">Gestion de Usuarios</h1>
+        <h1 className="text-lg font-bold text-usco-vino">GESTIÓN DE USUARIOS</h1>
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
@@ -167,7 +167,7 @@ const UsuariosPage = () => {
             {usuarios.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-sm text-usco-gris">
-                  No se encontraron usuarios con el criterio de busqueda.
+                  No se encontraron usuarios con el criterio de búsqueda.
                 </td>
               </tr>
             )}
@@ -272,7 +272,7 @@ const UsuariosPage = () => {
             Anterior
           </button>
           <span className="px-2 font-semibold text-usco-vino">
-            Pagina {currentPage} de {totalPages}
+            Página {currentPage} de {totalPages}
           </span>
           <button
             type="button"

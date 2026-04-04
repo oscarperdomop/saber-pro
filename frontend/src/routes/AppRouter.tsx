@@ -20,6 +20,7 @@ import EvaluacionesPage from '../features/estudiante/pages/EvaluacionesPage'
 import ModulosIntentoPage from '../features/estudiante/pages/ModulosIntentoPage'
 import PresentarExamenPage from '../features/estudiante/pages/PresentarExamenPage'
 import ResultadosExamenPage from '../features/estudiante/pages/ResultadosExamenPage'
+import ResultadosPage from '../features/estudiante/pages/ResultadosPage'
 
 const AppRouter = () => {
   return (
@@ -74,6 +75,7 @@ const AppRouter = () => {
             >
               <Route path="/estudiante/dashboard" element={<DashboardPage />} />
               <Route path="/evaluaciones" element={<EvaluacionesPage />} />
+              <Route path="/resultados" element={<ResultadosPage />} />
               <Route path="/evaluaciones/intento/:intentoId" element={<ModulosIntentoPage />} />
               <Route
                 path="/evaluaciones/intento/:intentoId/resultados"
