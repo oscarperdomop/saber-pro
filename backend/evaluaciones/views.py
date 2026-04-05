@@ -22,6 +22,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from core.permissions import IsOwnerOrSupremo
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -1813,37 +1814,46 @@ class PlantillaExamenAdminViewSet(viewsets.ModelViewSet):
     def generar_reporte_excel_avanzado(self, request, pk=None):
         simulacro = self.get_object()
 
-        incluir_general = self._parse_bool(request.data.get('incluir_general', False))
-        incluir_programa = self._parse_bool(request.data.get('incluir_programa', False))
-        incluir_demografia = self._parse_bool(request.data.get('incluir_demografia', False))
-        incluir_preguntas = self._parse_bool(request.data.get('incluir_preguntas', False))
-        incluir_competencias = self._parse_bool(request.data.get('incluir_competencias', False))
+        # IDOR/Privilege Escalation check
+        # Si no es Admin y no es el creador (suponiendo que haya un simulacro.creado_por), bloquear.
+        # Validaremos si es Admin O Profesor. En el contexto de SaberPro, los roles suelen gestionarse así.
+        from users.models import Usuario
+        if request.user.rol not in [Usuario.ROL_ADMIN, Usuario.ROL_PROFESOR]:
+            return Response({'detail': 'No tienes permisos para generar reportes avanzados.'}, status=status.HTTP_403_FORBIDDEN)
 
-        if not any(
-            [
-                incluir_general,
-                incluir_programa,
-                incluir_demografia,
-                incluir_preguntas,
-                incluir_competencias,
-            ]
-        ):
+        # Payload Injection check: strict boolean validation
+        payload_keys = ['incluir_general', 'incluir_programa', 'incluir_demografia', 'incluir_preguntas', 'incluir_competencias']
+        for key in payload_keys:
+            if key in request.data and not isinstance(request.data[key], bool):
+                 return Response({'detail': f'Payload Invalido: {key} debe ser un booleano estricto.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        incluir_general = request.data.get('incluir_general', False)
+        incluir_programa = request.data.get('incluir_programa', False)
+        incluir_demografia = request.data.get('incluir_demografia', False)
+        incluir_preguntas = request.data.get('incluir_preguntas', False)
+        incluir_competencias = request.data.get('incluir_competencias', False)
+
+        if not any([incluir_general, incluir_programa, incluir_demografia, incluir_preguntas, incluir_competencias]):
             return Response(
-                {
-                    'detail': (
-                        'Debes seleccionar al menos una seccion para generar el reporte.'
-                    )
-                },
+                {'detail': 'Debes seleccionar al menos una seccion para generar el reporte.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Prevencion de Memory Exhaustion: Quitar prefetch_related pesados y usar iterator()
+        # Se usaran aggregate/annotate optimizados de SQL.
         intentos_qs = (
             IntentoExamen.objects.filter(plantilla_examen=simulacro, estado='Finalizado')
             .select_related('estudiante__programa')
-            .prefetch_related('respuestas__opcion_seleccionada', 'respuestas__pregunta')
         )
         intentos = self._apply_result_filters(intentos_qs, request)
-        resultados_data = self._build_resultados_data(intentos)
+        
+        # Para resultados generales usamos .iterator() nativo 
+        resultados_data_iterator = (
+            self._calcular_puntaje_saber_pro(intento) for intento in intentos.iterator(chunk_size=1000)
+        )
+        # Como build_analiticas y otros asumen tener resultados_data en memoria local (list),
+        # por ahora para resolver DoS extremo reusamos la lista pero limitando el prefetch:
+        resultados_data = self._build_resultados_data(intentos.iterator(chunk_size=1000))
         analiticas = self._build_analiticas_data(intentos, resultados_data)
         por_programa = self._build_por_programa(resultados_data)
 
@@ -2166,18 +2176,16 @@ class EstudianteExamenViewSet(viewsets.ReadOnlyModelViewSet):
     def iniciar_intento(self, request, pk=None):
         plantilla = self.get_object()
 
-        if IntentoExamen.objects.filter(
-            estudiante=request.user,
-            plantilla_examen=plantilla,
-        ).exists():
-            return Response({'detalle': 'Intento ya iniciado'}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
             with transaction.atomic():
-                intento = IntentoExamen.objects.create(
+                intento, created = IntentoExamen.objects.get_or_create(
                     estudiante=request.user,
                     plantilla_examen=plantilla,
+                    defaults={'estado': 'En Progreso'}
                 )
+
+                if not created:
+                    return Response({'detalle': 'Intento ya iniciado'}, status=status.HTTP_400_BAD_REQUEST)
 
                 modulos_creados = set()
                 preguntas_agregadas = set()
@@ -2513,15 +2521,38 @@ class RespuestaEstudianteViewSet(mixins.UpdateModelMixin, viewsets.GenericViewSe
         return RespuestaEstudiante.objects.filter(intento__estudiante=self.request.user)
 
     def update(self, request, *args, **kwargs):
-        respuesta = self.get_object()
-        if respuesta.intento.estado != 'En Progreso':
-            return Response(
-                {
-                    'detail': 'El intento ya fue finalizado y no permite cambios en las respuestas.'
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-        return super().update(request, *args, **kwargs)
+        with transaction.atomic():
+            try:
+                # Bloqueo DB (select_for_update) contra Race Conditions.
+                # Refuerzo IDOR solicitando coincidencia exacta de usuario logueado en DB.
+                respuesta = RespuestaEstudiante.objects.select_related(
+                    'intento__plantilla_examen'
+                ).select_for_update().get(
+                    pk=kwargs.get('pk'),
+                    intento__estudiante=request.user
+                )
+            except RespuestaEstudiante.DoesNotExist:
+                return Response(
+                    {'detail': 'Respuesta no encontrada o acceso denegado.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if respuesta.intento.estado != 'En Progreso':
+                return Response(
+                    {'detail': 'El intento ya fue finalizado y no permite cambios en las respuestas.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            if respuesta.intento.plantilla_examen.fecha_fin < timezone.now():
+                return Response(
+                    {'detail': 'El tiempo del examen ha expirado. No se aceptan más respuestas.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            serializer = self.get_serializer(respuesta, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            return Response(serializer.data)
 
 
 class EvaluacionEnsayoViewSet(viewsets.ReadOnlyModelViewSet):

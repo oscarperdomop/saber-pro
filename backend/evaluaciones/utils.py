@@ -1,4 +1,4 @@
-﻿import io
+import io
 import json
 import os
 import re
@@ -270,6 +270,16 @@ def limpiar_fragmento_latex(fragmento):
     # Reemplaza cualquier secuencia de 2 o mÃ¡s saltos de lÃ­nea por uno solo.
     fragmento_limpio = re.sub(r'[\r\n]{2,}', '\n', str(fragmento or ''))
 
+    # [!] DEFENSIVIDAD ACTIVA: Sanitizacion Estricta Anti-LFI & Ejecucion Macro Insegura
+    comandos_prohibidos = [
+        r'\\write18', r'\\immediate', r'\\input', r'\\include', 
+        r'\\openin', r'\\read', r'\\openout', r'\\write', r'\\usepackage',
+        r'\\RequirePackage', r'\\PassOptionsToPackage', r'\\def', r'\\let'
+    ]
+    for prohibido in comandos_prohibidos:
+        if re.search(prohibido, fragmento_limpio, re.IGNORECASE):
+            raise ValueError(f"Comando de entorno LaTeX prohibido detectado por seguridad (LFI/RCE Guard).")
+
     # 2. Asegurarnos de que no haya espacios en blanco al inicio o final
     return fragmento_limpio.strip()
 
@@ -384,7 +394,10 @@ def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
                 text=True,
                 encoding='utf-8',
                 errors='ignore',
+                timeout=5,
             )
+        except subprocess.TimeoutExpired:
+            return None, 'Error de compilacion LaTeX: Timeout excedido (5s). Posible bucle infinito detectado (Fall Guard).'
         except FileNotFoundError:
             return None, (
                 f"No se encontro el compilador '{compiler}' en el servidor. "

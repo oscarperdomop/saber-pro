@@ -34,3 +34,9 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
                 'payload': event.get('payload', {}),
             }
         )
+
+    async def receive(self, text_data=None, bytes_data=None, **kwargs):
+        # [!] DEFENSIVIDAD: Parche Anti-Spam
+        # Los sockets de notificacion son estrictamente 'Server-Sent'.
+        # Destruimos la conexion inmediatamente si un cliente "habla" para evadir Parseo de Memoria.
+        await self.close(code=4003)

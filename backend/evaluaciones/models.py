@@ -1,9 +1,25 @@
+import os
 import uuid
 
 from django.conf import settings
 from django.db import models
 from users.models import ProgramaAcademico
 
+
+
+def generar_ruta_imagen_segura(instance, filename):
+    ext = filename.split('.')[-1].lower() if '.' in filename else ''
+    filename_str = f'{uuid.uuid4().hex}.{ext}' if ext else uuid.uuid4().hex
+    
+    # Resolviendo el subdirectorio dinamico para mantener organizacion semantica
+    if hasattr(instance, 'es_correcta'): # Es una OpcionRespuesta
+        return os.path.join('opciones_secure/', filename_str)
+    
+    # Es una Pregunta
+    if getattr(instance, 'contexto_imagen', None) and instance.contexto_imagen.name == filename:
+        return os.path.join('preguntas/contextos_secure/', filename_str)
+        
+    return os.path.join('preguntas/graficas_secure/', filename_str)
 
 class ModuloPrueba(models.Model):
     nombre = models.CharField(max_length=100, unique=True)
@@ -29,6 +45,7 @@ class Competencia(models.Model):
 
 
 class Pregunta(models.Model):
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='preguntas_creadas')
     NIVEL_DIFICULTAD_CHOICES = [
         ('Facil', 'Fácil'),
         ('Medio', 'Medio'),
@@ -52,8 +69,8 @@ class Pregunta(models.Model):
     competencia = models.ForeignKey(Competencia, on_delete=models.CASCADE)
     nivel_dificultad = models.CharField(max_length=15, choices=NIVEL_DIFICULTAD_CHOICES)
     contexto_texto = models.TextField(null=True, blank=True)
-    contexto_imagen = models.ImageField(upload_to='preguntas/contextos/', null=True, blank=True)
-    imagen_grafica = models.ImageField(upload_to='preguntas_graficas/', null=True, blank=True)
+    contexto_imagen = models.ImageField(upload_to=generar_ruta_imagen_segura, null=True, blank=True)
+    imagen_grafica = models.ImageField(upload_to=generar_ruta_imagen_segura, null=True, blank=True)
     codigo_latex = models.TextField(null=True, blank=True)
     soporte_multimedia = models.CharField(
         max_length=10,
@@ -82,7 +99,7 @@ class OpcionRespuesta(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     pregunta = models.ForeignKey(Pregunta, related_name='opciones', on_delete=models.CASCADE)
     texto = models.TextField(null=True, blank=True)
-    imagen = models.ImageField(upload_to='opciones/', null=True, blank=True)
+    imagen = models.ImageField(upload_to=generar_ruta_imagen_segura, null=True, blank=True)
     es_correcta = models.BooleanField(default=False)
 
     def __str__(self):
@@ -90,6 +107,7 @@ class OpcionRespuesta(models.Model):
 
 
 class PlantillaExamen(models.Model):
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='examenes_creados')
     ESTADO_CHOICES = [
         ('Borrador', 'Borrador'),
         ('Activo', 'Activo'),
@@ -159,6 +177,11 @@ class IntentoExamen(models.Model):
         blank=True,
         help_text='Plan de estudio generado por IA en formato Markdown',
     )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['estudiante', 'plantilla_examen'], name='unico_intento_por_examen')
+        ]
 
     def __str__(self):
         return f'Intento {self.id}'
