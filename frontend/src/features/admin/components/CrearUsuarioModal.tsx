@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { AxiosError } from 'axios'
@@ -47,7 +47,8 @@ const initialFormValues: FormValues = {
   password: '',
 }
 
-const SOLO_LETRAS_REGEX = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]+$/
+const SOLO_LETRAS_REGEX = /^[\p{L}\s]+$/u
+const CORREO_USCO_REGEX = /^[^\s@]+@usco\.edu\.co$/i
 
 const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps) => {
   const [formValues, setFormValues] = useState<FormValues>(initialFormValues)
@@ -121,7 +122,7 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
       }
 
       if (field === 'nombres' || field === 'apellidos') {
-        const sanitized = value.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]/g, '')
+        const sanitized = value.replace(/[^\p{L}\s]/gu, '')
         return { ...current, [field]: sanitized }
       }
 
@@ -178,13 +179,13 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
       return
     }
 
-    if (!payload.correo_institucional.endsWith('@usco.edu.co')) {
+    if (!CORREO_USCO_REGEX.test(payload.correo_institucional)) {
       setErrorMessage('El correo institucional debe terminar en @usco.edu.co.')
       return
     }
 
     if (!/^\d{1,10}$/.test(payload.numero_documento)) {
-      setErrorMessage('El número de documento debe contener solo números y máximo 10 dígitos.')
+      setErrorMessage('El nÃºmero de documento debe contener solo nÃºmeros y mÃ¡ximo 10 dÃ­gitos.')
       return
     }
 
@@ -222,7 +223,7 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
       <div className="mx-auto my-2 w-[560px] max-w-full max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-lg bg-white p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl sm:my-6 sm:p-6">
         <h2 className="text-xl font-bold text-usco-vino">Nuevo Usuario</h2>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <form noValidate onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="col-span-1">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">Nombres</span>
@@ -230,7 +231,6 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
                 type="text"
                 value={formValues.nombres}
                 onChange={(event) => handleChange('nombres', event.target.value)}
-                pattern="[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+"
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               />
@@ -242,7 +242,6 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
                 type="text"
                 value={formValues.apellidos}
                 onChange={(event) => handleChange('apellidos', event.target.value)}
-                pattern="[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+"
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               />
@@ -253,10 +252,10 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
                 Correo Institucional
               </span>
               <input
-                type="email"
+                type="text"
+                inputMode="email"
                 value={formValues.correo_institucional}
                 onChange={(event) => handleChange('correo_institucional', event.target.value)}
-                pattern="^[^@\\s]+@usco\\.edu\\.co$"
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               />
@@ -280,14 +279,13 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
 
             <label className="col-span-1">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">
-                Número de Documento
+                NÃºmero de Documento
               </span>
               <input
                 type="text"
                 value={formValues.numero_documento}
                 onChange={(event) => handleChange('numero_documento', event.target.value)}
                 inputMode="numeric"
-                pattern="\d{1,10}"
                 maxLength={10}
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
@@ -344,7 +342,7 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
             </label>
 
             <label className="col-span-1">
-              <span className="mb-1 block text-sm font-semibold text-usco-gris">Género</span>
+              <span className="mb-1 block text-sm font-semibold text-usco-gris">GÃ©nero</span>
               <select
                 value={formValues.genero}
                 onChange={(event) => handleChange('genero', event.target.value)}
@@ -375,14 +373,14 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
 
             <label className="col-span-1">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">
-                Contraseña Inicial (Opcional)
+                ContraseÃ±a Inicial (Opcional)
               </span>
               <input
                 type="text"
                 value={formValues.password}
                 onChange={(event) => handleChange('password', event.target.value)}
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
-                placeholder="Si lo dejas vacío, se usa el documento"
+                placeholder="Si lo dejas vacÃ­o, se usa el documento"
               />
             </label>
           </div>
@@ -418,3 +416,4 @@ const CrearUsuarioModal = ({ isOpen, onClose, onNotify }: CrearUsuarioModalProps
 }
 
 export default CrearUsuarioModal
+
