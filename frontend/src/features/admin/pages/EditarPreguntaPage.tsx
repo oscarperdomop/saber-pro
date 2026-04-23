@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import especificacionesService from '../services/especificacionesService'
 import preguntasService from '../services/preguntasService'
 import type { ActualizarPreguntaResult } from '../services/preguntasService'
@@ -14,6 +14,8 @@ import type { Modulo, Pregunta } from '../../../types/preguntas'
 interface ApiErrorResponse {
   detail?: string
   detalle?: string
+  error?: string
+  detalle_tecnico?: string
   [key: string]: unknown
 }
 
@@ -24,6 +26,12 @@ interface OpcionForm {
   imagen: File | string | null
   previewUrl: string | null
 }
+
+interface EditarPreguntaLocationState {
+  fromCarousel?: boolean
+}
+
+const CAROUSEL_NOTIFICATION_STORAGE_KEY = 'preguntas_carousel_notification'
 
 const mapDificultadFromPregunta = (dificultad: string): 'Facil' | 'Media' | 'Alta' => {
   if (dificultad === 'Facil') {
@@ -78,9 +86,12 @@ const getBackendOrigin = (): string => {
 
 const EditarPreguntaPage = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const { preguntaId } = useParams()
   const backendOrigin = useMemo(() => getBackendOrigin(), [])
+  const locationState = (location.state as EditarPreguntaLocationState | null) ?? null
+  const fromCarousel = Boolean(locationState?.fromCarousel)
 
   const [moduloId, setModuloId] = useState<number | ''>('')
   const [categoriaId, setCategoriaId] = useState<number | ''>('')
@@ -97,6 +108,10 @@ const EditarPreguntaPage = () => {
   const [imagenGrafica, setImagenGrafica] = useState<File | string | null>(null)
   const [imagenGraficaPreview, setImagenGraficaPreview] = useState<string | null>(null)
   const [codigoLatex, setCodigoLatex] = useState('')
+  const [previewPdf, setPreviewPdf] = useState('')
+  const [previewPng, setPreviewPng] = useState('')
+  const [previewError, setPreviewError] = useState('')
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [limitePalabras, setLimitePalabras] = useState<number>(300)
   const [opciones, setOpciones] = useState<OpcionForm[]>([
     { texto: '', es_correcta: true, imagen: null, previewUrl: null },
@@ -110,6 +125,20 @@ const EditarPreguntaPage = () => {
     const fallbackModulo = pregunta ? getModuloNombre(pregunta) : 'General'
     const moduloNombre = moduloSeleccionado?.nombre ?? fallbackModulo
     return `/preguntas/modulo/${encodeURIComponent(moduloNombre)}`
+  }
+
+  const volverSegunOrigen = (
+    notification?: { type: 'success' | 'info'; message: string },
+  ) => {
+    if (fromCarousel) {
+      if (notification && typeof window !== 'undefined') {
+        window.sessionStorage.setItem(CAROUSEL_NOTIFICATION_STORAGE_KEY, JSON.stringify(notification))
+      }
+      navigate(-1)
+      return
+    }
+
+    navigate(buildModuloRoute(), notification ? { state: { notification } } : undefined)
   }
 
   const { data: modulos, isLoading: cargandoModulos } = useQuery<Modulo[], AxiosError<ApiErrorResponse>>({
@@ -231,13 +260,9 @@ const EditarPreguntaPage = () => {
       const versionadoMsg =
         'Esta pregunta ya habia sido respondida. Para proteger el historial, se guardo como una nueva version y la anterior fue archivada.'
 
-      navigate(buildModuloRoute(), {
-        state: {
-          notification: {
-            type: result.versionada ? 'info' : 'success',
-            message: result.versionada ? versionadoMsg : 'Cambios guardados correctamente.',
-          },
-        },
+      volverSegunOrigen({
+        type: result.versionada ? 'info' : 'success',
+        message: result.versionada ? versionadoMsg : 'Cambios guardados correctamente.',
       })
     },
     onError: (mutationError: AxiosError<ApiErrorResponse>) => {
@@ -336,6 +361,9 @@ const EditarPreguntaPage = () => {
 
     if (value !== 'LATEX') {
       setCodigoLatex('')
+      setPreviewPdf('')
+      setPreviewPng('')
+      setPreviewError('')
     }
   }
 
@@ -345,6 +373,41 @@ const EditarPreguntaPage = () => {
     }
     setImagenGrafica(file)
     setImagenGraficaPreview(file ? URL.createObjectURL(file) : null)
+  }
+
+  const handlePreviewLatex = async () => {
+    const snippet = codigoLatex.trim()
+    if (!snippet) {
+      setPreviewPdf('')
+      setPreviewPng('')
+      setPreviewError('Escribe primero un fragmento LaTeX para previsualizar.')
+      return
+    }
+
+    setIsLoadingPreview(true)
+    setPreviewError('')
+
+    try {
+      const preview = await preguntasService.previsualizarLatex(snippet)
+      setPreviewPdf(preview.pdfBase64)
+      setPreviewPng(preview.pngBase64 ?? '')
+    } catch (error) {
+      const axiosError = error as AxiosError<ApiErrorResponse>
+      const responseData = axiosError.response?.data
+      const baseMessage =
+        responseData?.detalle ??
+        responseData?.detail ??
+        responseData?.error ??
+        'No fue posible compilar el codigo LaTeX.'
+      const detalleTecnico = responseData?.detalle_tecnico
+      setPreviewPdf('')
+      setPreviewPng('')
+      setPreviewError(
+        detalleTecnico ? `${String(baseMessage)}\n${String(detalleTecnico)}` : String(baseMessage),
+      )
+    } finally {
+      setIsLoadingPreview(false)
+    }
   }
 
   const getImagenPreview = (opcion: OpcionForm) => {
@@ -555,11 +618,7 @@ const EditarPreguntaPage = () => {
     }
 
     if (JSON.stringify(normalizedCurrent) === JSON.stringify(normalizedOriginal)) {
-      navigate(buildModuloRoute(), {
-        state: {
-          notification: { type: 'info', message: 'Sin cambios por guardar.' },
-        },
-      })
+      volverSegunOrigen({ type: 'info', message: 'Sin cambios por guardar.' })
       return
     }
 
@@ -646,7 +705,7 @@ const EditarPreguntaPage = () => {
       <header className="flex flex-col gap-3">
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={() => volverSegunOrigen()}
           className="inline-flex w-fit items-center gap-2 rounded-xl border border-usco-gris/30 px-3 py-2 text-sm font-semibold text-usco-gris transition hover:border-usco-vino hover:text-usco-vino"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -843,11 +902,44 @@ const EditarPreguntaPage = () => {
                   </p>
                   <textarea
                     value={codigoLatex}
-                    onChange={(event) => setCodigoLatex(event.target.value)}
+                    onChange={(event) => {
+                      setCodigoLatex(event.target.value)
+                      setPreviewError('')
+                    }}
                     rows={4}
                     placeholder="$\\frac{2}{1212}$"
                     className="w-full rounded border border-gray-300 p-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                   />
+                  <button
+                    type="button"
+                    onClick={handlePreviewLatex}
+                    disabled={isLoadingPreview}
+                    className="inline-flex items-center rounded-lg border border-usco-vino/40 bg-white px-3 py-2 text-xs font-semibold text-usco-vino transition hover:bg-usco-vino/5 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isLoadingPreview ? 'Compilando...' : '⚡ Previsualizar LaTeX'}
+                  </button>
+                  {previewError && (
+                    <div className="whitespace-pre-wrap rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-700">
+                      {previewError}
+                    </div>
+                  )}
+                  {previewPng ? (
+                    <div className="overflow-hidden rounded-lg border border-usco-ocre/60 bg-white p-2">
+                      <img
+                        src={`data:image/png;base64,${previewPng}`}
+                        alt="Vista previa LaTeX"
+                        className="mx-auto max-h-64 w-auto object-contain"
+                      />
+                    </div>
+                  ) : previewPdf ? (
+                    <div className="overflow-hidden rounded-lg border border-usco-ocre/60 bg-white">
+                      <iframe
+                        title="Vista previa PDF LaTeX"
+                        src={`data:application/pdf;base64,${previewPdf}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                        className="h-56 w-full"
+                      />
+                    </div>
+                  ) : null}
                   <KaTeXPreview text={codigoLatex} label="Vista previa LaTeX" />
                 </div>
               )}

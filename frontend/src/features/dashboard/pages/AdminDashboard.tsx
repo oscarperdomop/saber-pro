@@ -136,15 +136,20 @@ const AdminDashboard = () => {
 
   return (
     <section className="mx-auto w-full max-w-7xl space-y-6">
+      <header>
+        <h1 className="text-2xl font-extrabold tracking-tight text-usco-vino">
+          DASHBOARD ADMINISTRATIVO SABER PRO
+        </h1>
+      </header>
       <header className="overflow-hidden rounded-3xl bg-gradient-to-br from-usco-vino to-[#741017] p-6 text-white shadow-lg">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div>
             <p className="text-xs uppercase tracking-[0.18em] text-white/80">
               INTELIGENCIA ACADÉMICA
             </p>
-            <h1 className="mt-2 text-lg font-bold">
-              DASHBOARD ADMINISTRATIVO SABER PRO
-            </h1>
+            <p className="mt-2 text-lg font-semibold uppercase tracking-[0.08em] text-white/90">
+              Dashboard de inteligencia institucional
+            </p>
             <p className="mt-2 max-w-2xl text-sm text-white/85">
               Monitorea participación institucional y detecta focos de mejora
               académica con indicadores en tiempo real.

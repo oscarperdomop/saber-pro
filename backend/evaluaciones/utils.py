@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -272,13 +273,26 @@ def limpiar_fragmento_latex(fragmento):
 
     # [!] DEFENSIVIDAD ACTIVA: Sanitizacion Estricta Anti-LFI & Ejecucion Macro Insegura
     comandos_prohibidos = [
-        r'\\write18', r'\\immediate', r'\\input', r'\\include', 
-        r'\\openin', r'\\read', r'\\openout', r'\\write', r'\\usepackage',
-        r'\\RequirePackage', r'\\PassOptionsToPackage', r'\\def', r'\\let'
+        # Requeridos por auditoria
+        r'\\write18?\b',
+        r'\\input\b',
+        r'\\include\b',
+        r'\\immediate\b',
+        r'\\def\b',
+        # Cobertura defensiva adicional
+        r'\\openin\b',
+        r'\\read\b',
+        r'\\openout\b',
+        r'\\usepackage\b',
+        r'\\RequirePackage\b',
+        r'\\PassOptionsToPackage\b',
+        r'\\let\b',
     ]
     for prohibido in comandos_prohibidos:
         if re.search(prohibido, fragmento_limpio, re.IGNORECASE):
-            raise ValueError(f"Comando de entorno LaTeX prohibido detectado por seguridad (LFI/RCE Guard).")
+            raise ValueError(
+                'Comando de entorno LaTeX prohibido detectado por seguridad (LFI/RCE Guard).'
+            )
 
     # 2. Asegurarnos de que no haya espacios en blanco al inicio o final
     return fragmento_limpio.strip()
@@ -444,5 +458,188 @@ def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
         image_buffer.seek(0)
         file_name = f"{str(nombre_archivo or 'pregunta_latex').strip()}.png"
         return ContentFile(image_buffer.read(), name=file_name), None
+
+
+def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
+    fragmento = limpiar_fragmento_latex(texto_latex)
+    if not fragmento:
+        return None, None, 'No se recibio texto LaTeX para previsualizar.'
+
+    compiler = _resolve_latex_compiler()
+    if not compiler:
+        return None, None, (
+            "No se encontro un compilador LaTeX disponible. Configura LATEX_COMPILER "
+            "o instala MiKTeX/TeXLive (pdflatex/xelatex), o usa el binario portable "
+            "de Tectonic en backend/tools/tectonic/tectonic.exe."
+        )
+
+    preview_preamble = r"""
+\documentclass[preview,border=2pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable,skins}
+
+\newtcolorbox{pregunta}[1][]{
+  breakable,
+  colback=white,
+  colframe=black!35,
+  boxrule=0.6pt,
+  arc=1mm,
+  left=2mm,
+  right=2mm,
+  top=1.5mm,
+  bottom=1.5mm,
+  title={#1},
+  fonttitle=\bfseries
+}
+""".strip()
+
+    codigo_completo = (
+        f"{preview_preamble}\n"
+        r"\begin{document}" "\n"
+        f"{fragmento}\n"
+        r"\end{document}" "\n"
+    )
+
+    timeout_seconds = max(3, min(int(timeout_seconds or 5), 5))
+
+    with TemporaryDirectory() as temp_dir:
+        tex_path = os.path.join(temp_dir, 'input.tex')
+        with open(tex_path, 'w', encoding='utf-8') as tex_file:
+            tex_file.write(codigo_completo)
+
+        def _sanitize_compiler_output(raw_text):
+            lines = []
+            for line in str(raw_text or '').splitlines():
+                lower = line.lower()
+                if 'fontconfig error' in lower:
+                    continue
+                if 'no such file: (null)' in lower:
+                    continue
+                lines.append(line)
+            return '\n'.join(lines).strip()
+
+        try:
+            compiler_name = os.path.basename(str(compiler)).lower()
+            if 'tectonic' in compiler_name:
+                compile_cmd = [
+                    compiler,
+                    '--keep-logs',
+                    '--keep-intermediates',
+                    'input.tex',
+                ]
+            else:
+                compile_cmd = [
+                    compiler,
+                    '-interaction=nonstopmode',
+                    '-halt-on-error',
+                    '-file-line-error',
+                    'input.tex',
+                ]
+
+            subprocess.run(
+                compile_cmd,
+                cwd=temp_dir,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                errors='ignore',
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            timeout_output = '\n'.join(
+                [
+                    str(exc.stdout or '').strip(),
+                    str(exc.stderr or '').strip(),
+                ]
+            ).strip()
+            timeout_output = _sanitize_compiler_output(timeout_output)
+            timeout_output = timeout_output[-1200:] if timeout_output else ''
+            detalle = (
+                f'Error de compilacion LaTeX: Timeout excedido '
+                f'({timeout_seconds}s).'
+            )
+            if timeout_output:
+                detalle = f'{detalle}\n{timeout_output}'
+            return None, None, detalle
+        except FileNotFoundError:
+            return None, None, (
+                f"No se encontro el compilador '{compiler}' en el servidor. "
+                "Verifica LATEX_COMPILER, PATH o usa backend/tools/tectonic/tectonic.exe."
+            )
+        except subprocess.CalledProcessError as exc:
+            output = '\n'.join(
+                [
+                    str(exc.stdout or '').strip(),
+                    str(exc.stderr or '').strip(),
+                ]
+            ).strip()
+            output = _sanitize_compiler_output(output)
+            output = output[-2000:] if output else 'Error desconocido de compilacion.'
+            return None, None, f'Error de compilacion LaTeX: {output}'
+
+        pdf_path = os.path.join(temp_dir, 'input.pdf')
+        if not os.path.exists(pdf_path):
+            return None, None, 'No se genero el PDF de salida al compilar LaTeX.'
+
+        with open(pdf_path, 'rb') as pdf_file:
+            pdf_bytes = pdf_file.read()
+
+        if not pdf_bytes:
+            return None, None, 'La compilacion finalizo sin contenido PDF.'
+
+        pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
+        png_b64 = None
+
+        # Render PNG para un preview mas "tight" y agradable en UI.
+        try:
+            from pdf2image import convert_from_path
+            from PIL import Image, ImageChops
+
+            poppler_path = str(getattr(settings, 'LATEX_POPPLER_PATH', '') or '').strip() or None
+            images = convert_from_path(
+                pdf_path,
+                dpi=220,
+                fmt='png',
+                first_page=1,
+                last_page=1,
+                single_file=True,
+                poppler_path=poppler_path,
+            )
+            if images:
+                image = images[0].convert('RGB')
+                white_bg = Image.new('RGB', image.size, (255, 255, 255))
+                diff = ImageChops.difference(image, white_bg)
+                bbox = diff.getbbox()
+                if bbox:
+                    image = image.crop(bbox)
+                # Margen visual minimo para no cortar trazos
+                image = image.crop(
+                    (
+                        max(0, image.getbbox()[0] - 2) if image.getbbox() else 0,
+                        max(0, image.getbbox()[1] - 2) if image.getbbox() else 0,
+                        min(image.width, image.getbbox()[2] + 2) if image.getbbox() else image.width,
+                        min(image.height, image.getbbox()[3] + 2) if image.getbbox() else image.height,
+                    )
+                )
+                png_buffer = io.BytesIO()
+                image.save(png_buffer, format='PNG')
+                png_buffer.seek(0)
+                png_b64 = base64.b64encode(png_buffer.read()).decode('utf-8')
+        except Exception:
+            png_b64 = None
+
+        return pdf_b64, png_b64, None
 
 

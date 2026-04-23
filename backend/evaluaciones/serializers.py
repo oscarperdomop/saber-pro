@@ -500,7 +500,7 @@ class OpcionRespuestaEstudianteSerializer(serializers.ModelSerializer):
 
 
 class PreguntaEstudianteSerializer(serializers.ModelSerializer):
-    opciones = OpcionRespuestaEstudianteSerializer(many=True, read_only=True)
+    opciones = serializers.SerializerMethodField()
     modulo_id = serializers.IntegerField(source='modulo.id', read_only=True)
     modulo_nombre = serializers.CharField(source='modulo.nombre', read_only=True)
 
@@ -519,6 +519,12 @@ class PreguntaEstudianteSerializer(serializers.ModelSerializer):
             'limite_palabras',
             'opciones',
         ]
+
+    @staticmethod
+    def get_opciones(obj):
+        # Orden determinista: evita variaciones no deseadas entre consultas.
+        opciones = obj.opciones.order_by('id')
+        return OpcionRespuestaEstudianteSerializer(opciones, many=True).data
 
 
 class RespuestaEstudianteDetalleSerializer(serializers.ModelSerializer):

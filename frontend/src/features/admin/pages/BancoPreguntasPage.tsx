@@ -445,7 +445,7 @@ const BancoPreguntasPage = () => {
     <section className="bank-scope mx-auto w-full max-w-7xl space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-lg font-bold text-usco-vino">BANCO DE PREGUNTAS</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-usco-vino">BANCO DE PREGUNTAS</h1>
           <p className="mt-1 text-sm text-usco-gris">Gestión modular de preguntas para el ecosistema Saber Pro.</p>
         </div>
 
@@ -453,7 +453,7 @@ const BancoPreguntasPage = () => {
           <button
             type="button"
             onClick={() => setIsBulkModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-usco-gris px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3e4f58]"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-usco-ocre/90 bg-usco-ocre px-4 py-2.5 text-sm font-bold text-usco-vino shadow-sm transition hover:bg-yellow-200"
           >
             <Upload className="h-4 w-4" />
             Carga Masiva (Excel)

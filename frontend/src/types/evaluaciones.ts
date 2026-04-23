@@ -195,3 +195,22 @@ export interface ConfigReporteAvanzadoSimulacro {
   genero?: string
   semestre?: string | number
 }
+
+export interface SimulacroParticipacionActivo {
+  id: string
+  nombre: string
+  poblacion_objetivo: number
+  completados: number
+  pendientes: number
+  porcentaje_completado: number
+  promedio_puntaje?: number | null
+  promedio_tiempo_minutos?: number | null
+}
+
+export interface SimulacrosDashboardStats {
+  globales: {
+    total: number
+    activos: number
+  }
+  simulacros_activos: SimulacroParticipacionActivo[]
+}

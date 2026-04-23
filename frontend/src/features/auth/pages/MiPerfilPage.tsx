@@ -137,7 +137,7 @@ const MiPerfilPage = () => {
   return (
     <section className="mx-auto w-full max-w-5xl space-y-6">
       <header>
-        <h1 className="text-xl font-bold tracking-tight text-usco-vino">MI PERFIL</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-usco-vino">MI PERFIL</h1>
         <p className="mt-2 text-sm text-usco-gris">
           Consulta tu información institucional y administra tu seguridad de acceso.
         </p>

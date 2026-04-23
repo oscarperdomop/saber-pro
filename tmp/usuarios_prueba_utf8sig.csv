@@ -1,0 +1,5 @@
+﻿sep=;
+documento;tipo_documento;nombres;apellidos;correo_institucional;programa;genero;semestre
+1000000001;CC;USUARIO1;PEREZ;test1@usco.edu.co;INGENIERIA DE SOFTWARE;M;2
+1000000002;CC;USUARIO2;PEREZ;test2@usco.edu.co;INGENIERIA DE SOFTWARE;F;3
+1000000003;CC;USUARIO3;PEREZ;test3@usco.edu.co;INGENIERIA DE SOFTWARE;M;4

@@ -13,7 +13,10 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import simulacrosService from "../services/simulacrosService";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
-import type { PlantillaExamen } from "../../../types/evaluaciones";
+import type {
+  PlantillaExamen,
+  SimulacrosDashboardStats,
+} from "../../../types/evaluaciones";
 
 interface ApiErrorResponse {
   detail?: string;
@@ -57,6 +60,15 @@ const SimulacrosPage = () => {
     queryKey: ["simulacros", mostrarArchivados],
     queryFn: () => simulacrosService.getSimulacros(mostrarArchivados),
   });
+  const {
+    data: dashboardStats,
+    isLoading: isDashboardLoading,
+    isError: isDashboardError,
+    error: dashboardError,
+  } = useQuery<SimulacrosDashboardStats, AxiosError<ApiErrorResponse>>({
+    queryKey: ["simulacrosDashboardStats"],
+    queryFn: simulacrosService.getSimulacrosDashboardStats,
+  });
 
   const eliminarSimulacroMutation = useMutation({
     mutationFn: simulacrosService.eliminarSimulacro,
@@ -64,6 +76,7 @@ const SimulacrosPage = () => {
       setActionError("");
       setSuccessMessage("Simulacro eliminado correctamente.");
       queryClient.invalidateQueries({ queryKey: ["simulacros"] });
+      queryClient.invalidateQueries({ queryKey: ["simulacrosDashboardStats"] });
     },
     onError: (mutationError: AxiosError<ApiErrorResponse>) => {
       setActionError(
@@ -82,6 +95,7 @@ const SimulacrosPage = () => {
         response.detail ?? "Simulacro archivado correctamente.",
       );
       queryClient.invalidateQueries({ queryKey: ["simulacros"] });
+      queryClient.invalidateQueries({ queryKey: ["simulacrosDashboardStats"] });
     },
     onError: (mutationError: AxiosError<ApiErrorResponse>) => {
       setActionError(
@@ -128,6 +142,11 @@ const SimulacrosPage = () => {
   }
 
   const simulacros = data ?? [];
+  const dashboardGlobales = dashboardStats?.globales ?? {
+    total: simulacros.length,
+    activos: simulacros.filter((simulacro) => simulacro.estado === "Activo").length,
+  };
+  const simulacrosActivosDashboard = dashboardStats?.simulacros_activos ?? [];
 
   const handleEliminar = (id: string | number) => {
     setConfirmAction({ type: "delete", id });
@@ -165,13 +184,13 @@ const SimulacrosPage = () => {
   return (
     <section className="mx-auto w-full max-w-7xl space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-lg font-bold text-usco-vino">
+        <h1 className="text-2xl font-extrabold tracking-tight text-usco-vino">
           GESTIÓN DE SIMULACROS Y RESULTADOS
-        </h3>
+        </h1>
         <button
           type="button"
           onClick={() => navigate("/simulacros/nuevo")}
-          className="inline-flex items-center justify-center rounded-xl bg-usco-vino px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#741017]"
+          className="inline-flex items-center justify-center rounded-xl bg-usco-vino px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#741017]"
         >
           + NUEVO SIMULACRO
         </button>
@@ -188,6 +207,115 @@ const SimulacrosPage = () => {
           {actionError}
         </section>
       )}
+
+      <section className="space-y-4 rounded-2xl border border-usco-ocre/70 bg-white p-4 shadow-sm">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <article className="rounded-xl border border-gray-200 bg-gradient-to-br from-white to-usco-fondo p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-usco-gris">
+              Total de simulacros
+            </p>
+            <p className="mt-2 text-3xl font-bold text-usco-vino">
+              {dashboardGlobales.total}
+            </p>
+          </article>
+          <article className="rounded-xl border border-green-200 bg-gradient-to-br from-white to-green-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-usco-gris">
+              Simulacros activos
+            </p>
+            <p className="mt-2 text-3xl font-bold text-green-700">
+              {dashboardGlobales.activos}
+            </p>
+          </article>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+          <h4 className="text-sm font-bold uppercase tracking-wide text-usco-gris">
+            Participación en vivo
+          </h4>
+
+          {isDashboardLoading && (
+            <p className="mt-3 text-sm text-usco-gris">
+              Cargando métricas de participación...
+            </p>
+          )}
+
+          {isDashboardError && (
+            <p className="mt-3 text-sm text-amber-700">
+              {dashboardError.response?.data?.detail ??
+                dashboardError.response?.data?.detalle ??
+                "No fue posible cargar el dashboard de participación."}
+            </p>
+          )}
+
+          {!isDashboardLoading && !isDashboardError && simulacrosActivosDashboard.length === 0 && (
+            <p className="mt-3 text-sm text-usco-gris">
+              No hay simulacros activos con seguimiento disponible en este momento.
+            </p>
+          )}
+
+          {!isDashboardLoading && !isDashboardError && simulacrosActivosDashboard.length > 0 && (
+            <div className="mt-4 space-y-4">
+              {simulacrosActivosDashboard.map((simulacro) => {
+                const basePoblacion = Math.max(simulacro.poblacion_objetivo, 0);
+                const completados = Math.max(simulacro.completados, 0);
+                const pendientes = Math.max(simulacro.pendientes, 0);
+                const porcentajeCompletado =
+                  basePoblacion > 0
+                    ? Math.min((completados / basePoblacion) * 100, 100)
+                    : 0;
+                const porcentajePendiente = 100 - porcentajeCompletado;
+
+                return (
+                  <article
+                    key={simulacro.id}
+                    className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-usco-vino">{simulacro.nombre}</p>
+                      <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                        {porcentajeCompletado.toFixed(1)}% completado
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-gray-200">
+                      <div
+                        className="h-full bg-green-500"
+                        style={{ width: `${porcentajeCompletado}%` }}
+                      />
+                      {porcentajePendiente > 0 && (
+                        <div
+                          className="h-full bg-amber-400"
+                          style={{ width: `${porcentajePendiente}%` }}
+                        />
+                      )}
+                    </div>
+
+                    <div className="mt-3 grid gap-2 text-xs text-usco-gris sm:grid-cols-4">
+                      <span className="rounded-md bg-blue-50 px-2 py-1">
+                        Objetivo: <strong>{basePoblacion}</strong>
+                      </span>
+                      <span className="rounded-md bg-green-50 px-2 py-1 text-green-700">
+                        Completados: <strong>{completados}</strong>
+                      </span>
+                      <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-800">
+                        Pendientes: <strong>{pendientes}</strong>
+                      </span>
+                      <span className="rounded-md bg-gray-100 px-2 py-1 text-gray-700">
+                        Puntaje prom.:{" "}
+                        <strong>
+                          {typeof simulacro.promedio_puntaje === "number"
+                            ? simulacro.promedio_puntaje.toFixed(1)
+                            : "N/A"}
+                        </strong>
+                      </span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
 
       <label className="flex w-max cursor-pointer items-center gap-2 rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-200">
         <input

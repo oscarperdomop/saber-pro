@@ -6,6 +6,7 @@ import type {
   FiltrosResultadosSimulacro,
   PlantillaExamen,
   ResultadoSimulacro,
+  SimulacrosDashboardStats,
 } from '../../../types/evaluaciones'
 
 interface PlantillaExamenRaw extends Omit<PlantillaExamen, 'activo'> {
@@ -134,6 +135,19 @@ export const archivarSimulacro = async (id: string | number): Promise<{ detail: 
   return data
 }
 
+export const getSimulacrosDashboardStats = async (): Promise<SimulacrosDashboardStats> => {
+  const { data } = await axiosInstance.get<SimulacrosDashboardStats>(
+    '/evaluaciones/admin/simulacros/dashboard-stats/',
+  )
+  return {
+    globales: {
+      total: Number(data?.globales?.total ?? 0),
+      activos: Number(data?.globales?.activos ?? 0),
+    },
+    simulacros_activos: Array.isArray(data?.simulacros_activos) ? data.simulacros_activos : [],
+  }
+}
+
 export const getResultadosSimulacro = async (
   id: string | number,
   filtros?: FiltrosResultadosSimulacro,
@@ -246,6 +260,7 @@ const simulacrosService = {
   actualizarSimulacro,
   eliminarSimulacro,
   archivarSimulacro,
+  getSimulacrosDashboardStats,
   getResultadosSimulacro,
   obtenerAnaliticasSimulacro,
   exportarResultadosExcel,

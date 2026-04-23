@@ -9,6 +9,7 @@ import EditarPreguntaPage from '../features/admin/pages/EditarPreguntaPage'
 import EditarSimulacroPage from '../features/admin/pages/EditarSimulacroPage'
 import EspecificacionesModuloPage from '../features/admin/pages/EspecificacionesModuloPage'
 import PreguntasModuloPage from '../features/admin/pages/PreguntasModuloPage'
+import PreguntaCarouselView from '../features/admin/pages/PreguntaCarouselView'
 import ResultadosSimulacroPage from '../features/admin/pages/ResultadosSimulacroPage'
 import SimulacrosPage from '../features/admin/pages/SimulacrosPage'
 import UsuariosPage from '../features/admin/pages/UsuariosPage'
@@ -53,6 +54,7 @@ const AppRouter = () => {
               <Route path="/preguntas" element={<BancoPreguntasPage />} />
               <Route path="/preguntas/nueva" element={<CrearPreguntaPage />} />
               <Route path="/preguntas/:preguntaId/editar" element={<EditarPreguntaPage />} />
+              <Route path="/preguntas/carousel" element={<PreguntaCarouselView />} />
               <Route path="/preguntas/modulo/:moduloNombre" element={<PreguntasModuloPage />} />
               <Route path="/modulos/especificaciones" element={<EspecificacionesModuloPage />} />
               <Route path="/simulacros" element={<SimulacrosPage />} />

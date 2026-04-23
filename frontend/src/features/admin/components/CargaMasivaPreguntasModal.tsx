@@ -81,6 +81,13 @@ const CargaMasivaPreguntasModal = ({
     setCompetenciaId('')
   }, [moduloId])
 
+  const nombreModuloSeleccionado = useMemo(() => {
+    if (moduloId === '') {
+      return ''
+    }
+    return modulos.find((modulo) => Number(modulo.id) === Number(moduloId))?.nombre ?? ''
+  }, [moduloId, modulos])
+
   const closeModal = () => {
     if (isLoading) {
       return
@@ -96,11 +103,14 @@ const CargaMasivaPreguntasModal = ({
   const downloadTemplate = async () => {
     setErrorMessage('')
     try {
-      const blob = await preguntasService.descargarPlantillaCargaMasivaPreguntas()
+      const moduloSeleccionadoId = moduloId === '' ? undefined : Number(moduloId)
+      const { blob, filename } = await preguntasService.descargarPlantillaCargaMasivaPreguntas(
+        moduloSeleccionadoId,
+      )
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = 'Plantilla_Carga_Masiva_Preguntas.csv'
+      link.download = filename || 'plantilla_preguntas_generica.xlsx'
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -243,7 +253,9 @@ const CargaMasivaPreguntasModal = ({
                   className="inline-flex items-center gap-2 text-sm font-semibold text-usco-vino transition hover:text-[#741017]"
                 >
                   <Download className="h-4 w-4" />
-                  Descargar plantilla de ejemplo
+                  {nombreModuloSeleccionado
+                    ? `Descargar plantilla de ${nombreModuloSeleccionado}`
+                    : 'Descargar plantilla generica'}
                 </button>
               </div>
 

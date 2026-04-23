@@ -9,7 +9,9 @@ from .views import (
     NotificacionesContadorView,
     NotificacionesListView,
     ProgramasListView,
+    UsuariosDashboardStatsView,
     UsuariosEstadoUpdateView,
+    UsuariosExportExcelView,
     UsuariosListView,
 )
 
@@ -20,8 +22,10 @@ urlpatterns = [
     path('carga-masiva/', CargaMasivaUsuariosView.as_view(), name='carga_masiva'),
     path('perfil/', MiPerfilView.as_view(), name='mi_perfil'),
     path('programas/', ProgramasListView.as_view(), name='programas_list'),
+    path('usuarios/dashboard-stats/', UsuariosDashboardStatsView.as_view(), name='usuarios_dashboard_stats'),
     path('notificaciones/', NotificacionesListView.as_view(), name='notificaciones_list'),
     path('notificaciones/contador/', NotificacionesContadorView.as_view(), name='notificaciones_contador'),
     path('usuarios/', UsuariosListView.as_view(), name='usuarios_list'),
+    path('usuarios/exportar-excel/', UsuariosExportExcelView.as_view(), name='usuarios_export_excel'),
     path('usuarios/<uuid:user_id>/', UsuariosEstadoUpdateView.as_view(), name='usuarios_estado_update'),
 ]

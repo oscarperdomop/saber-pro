@@ -51,13 +51,24 @@ const resolveMediaUrl = (value?: string | null) => {
   return `${backendOrigin}/${raw.replace(/^\/+/, '')}`
 }
 
-const shuffleArray = <T,>(array: T[]): T[] => {
-  const newArray = [...array]
-  for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[newArray[i], newArray[j]] = [newArray[j], newArray[i]]
+const hashString = (value: string) => {
+  let hash = 2166136261
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i)
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)
   }
-  return newArray
+  return hash >>> 0
+}
+
+const sortOptionsDeterministically = <T extends { id: string }>(array: T[], seedBase: string): T[] => {
+  return [...array].sort((a, b) => {
+    const scoreA = hashString(`${seedBase}:${a.id}`)
+    const scoreB = hashString(`${seedBase}:${b.id}`)
+    if (scoreA === scoreB) {
+      return a.id.localeCompare(b.id)
+    }
+    return scoreA - scoreB
+  })
 }
 
 const PresentarExamenPage = () => {
@@ -68,7 +79,6 @@ const PresentarExamenPage = () => {
   const [respuestasLocales, setRespuestasLocales] = useState<RespuestasLocalState>({})
   const [showRecoveredMessage, setShowRecoveredMessage] = useState(false)
   const [showQuestionMapMobile, setShowQuestionMapMobile] = useState(false)
-  const opcionesPorRespuestaRef = useRef<Record<string, string[]>>({})
   const hasAutoPositionedRef = useRef(false)
   const storageKey = intentoId ? `simulacro_estado_${intentoId}` : ''
   const modulosCompletadosKey = intentoId ? `simulacro_modulos_completados_${intentoId}` : ''
@@ -141,10 +151,6 @@ const PresentarExamenPage = () => {
   })
 
   useEffect(() => {
-    opcionesPorRespuestaRef.current = {}
-  }, [moduloId, intentoId])
-
-  useEffect(() => {
     if (!intentoId || isLoadingIntento || !intentoData) {
       return
     }
@@ -186,26 +192,8 @@ const PresentarExamenPage = () => {
 
     return filtradas.map((respuesta) => {
       const opcionesOriginales = respuesta.pregunta.opciones ? [...respuesta.pregunta.opciones] : []
-      const ordenGuardado = opcionesPorRespuestaRef.current[respuesta.id]
-
-      let opcionesMezcladas = opcionesOriginales
-
-      if (ordenGuardado && ordenGuardado.length === opcionesOriginales.length) {
-        const opcionesPorId = new Map(opcionesOriginales.map((opcion) => [opcion.id, opcion]))
-        const opcionesOrdenadas = ordenGuardado
-          .map((id) => opcionesPorId.get(id))
-          .filter((opcion): opcion is (typeof opcionesOriginales)[number] => Boolean(opcion))
-
-        if (opcionesOrdenadas.length === opcionesOriginales.length) {
-          opcionesMezcladas = opcionesOrdenadas
-        } else {
-          opcionesMezcladas = shuffleArray(opcionesOriginales)
-          opcionesPorRespuestaRef.current[respuesta.id] = opcionesMezcladas.map((opcion) => opcion.id)
-        }
-      } else {
-        opcionesMezcladas = shuffleArray(opcionesOriginales)
-        opcionesPorRespuestaRef.current[respuesta.id] = opcionesMezcladas.map((opcion) => opcion.id)
-      }
+      const seedBase = `${intentoId ?? ''}:${respuesta.id}`
+      const opcionesMezcladas = sortOptionsDeterministically(opcionesOriginales, seedBase)
 
       return {
         ...respuesta,
@@ -215,7 +203,7 @@ const PresentarExamenPage = () => {
         },
       }
     })
-  }, [respuestas, moduloId])
+  }, [respuestas, moduloId, intentoId])
 
   const guardarRespuestaMutation = useMutation<
     void,
@@ -583,7 +571,7 @@ const PresentarExamenPage = () => {
         <button
           type="button"
           onClick={() => setShowQuestionMapMobile(true)}
-          className="fixed bottom-5 right-5 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full bg-usco-vino text-white shadow-lg transition hover:bg-red-900 lg:hidden"
+          className="fixed right-4 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full bg-usco-vino text-white shadow-lg transition hover:bg-red-900 lg:hidden bottom-[calc(env(safe-area-inset-bottom)+6.25rem)]"
           aria-label="Abrir mapa de preguntas"
         >
           <Grid2x2 className="h-5 w-5" />

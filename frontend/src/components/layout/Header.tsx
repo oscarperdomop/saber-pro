@@ -60,7 +60,11 @@ const Header = ({ onOpenMobileSidebar, onToggleSidebarCollapse, isSidebarCollaps
     const nextOpen = !isNotificationsOpen
     setIsNotificationsOpen(nextOpen)
     if (nextOpen) {
-      void refreshNotifications()
+      void (async () => {
+        await refreshNotifications()
+        await markAllAsRead()
+        await refreshNotifications()
+      })()
     }
   }
 
@@ -110,7 +114,7 @@ const Header = ({ onOpenMobileSidebar, onToggleSidebarCollapse, isSidebarCollaps
             aria-expanded={isNotificationsOpen}
           >
             <Bell className="h-4 w-4" />
-            {notificationCount > 0 ? (
+            {notificationCount > 0 && !isNotificationsOpen ? (
               <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-usco-vino px-1 text-[10px] font-bold text-white">
                 {notificationCount > 99 ? '99+' : notificationCount}
               </span>
@@ -118,7 +122,7 @@ const Header = ({ onOpenMobileSidebar, onToggleSidebarCollapse, isSidebarCollaps
           </button>
 
           {isNotificationsOpen ? (
-            <div className="absolute right-0 mt-2 w-[20rem] max-w-[85vw] overflow-hidden rounded-xl border border-usco-ocre/70 bg-white shadow-xl">
+            <div className="fixed left-2 right-2 top-16 z-[60] overflow-hidden rounded-xl border border-usco-ocre/70 bg-white shadow-xl md:absolute md:left-auto md:right-0 md:top-auto md:mt-2 md:w-[20rem] md:max-w-[85vw]">
               <div className="flex items-center justify-between border-b border-usco-ocre/60 px-3 py-2">
                 <p className="text-sm font-semibold text-usco-vino">Notificaciones</p>
                 <button
@@ -130,7 +134,7 @@ const Header = ({ onOpenMobileSidebar, onToggleSidebarCollapse, isSidebarCollaps
                 </button>
               </div>
 
-              <div className="max-h-72 overflow-y-auto">
+              <div className="max-h-[65vh] overflow-y-auto md:max-h-72">
                 {notifications.length > 0 ? (
                   notifications.map((notification) => (
                     <div
