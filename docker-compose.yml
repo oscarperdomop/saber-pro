@@ -1,5 +1,3 @@
-﻿version: "3.9"
-
 services:
   db:
     image: postgres:14
@@ -53,6 +51,8 @@ services:
       CHANNELS_REDIS_URL: redis://redis:6379/0
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,[::1]
       DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:8000
+      LATEX_COMPILER: ${LATEX_COMPILER:-/usr/local/bin/tectonic}
+      LATEX_POPPLER_PATH: ${LATEX_POPPLER_PATH:-/usr/bin}
     ports:
       - "8000:8000"
     working_dir: /app

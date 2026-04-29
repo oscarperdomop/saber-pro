@@ -17,11 +17,28 @@ Including another URLconf
 from django.contrib import admin
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import JsonResponse
 from django.urls import include, path
 from evaluaciones.views import AnaliticasAdminViewSet, PreguntaAdminViewSet, ReportesViewSet
 from users.views import CargaMasivaUsuariosView, UsuariosEstadoUpdateView
 
+
+def root_view(_request):
+    return JsonResponse(
+        {
+            'status': 'ok',
+            'service': 'saber-pro-backend',
+            'endpoints': {
+                'admin': '/admin/',
+                'auth': '/api/auth/',
+                'evaluaciones': '/api/evaluaciones/',
+            },
+        }
+    )
+
+
 urlpatterns = [
+    path('', root_view, name='root'),
     path('admin/', admin.site.urls),
     path('api/auth/', include('users.urls')),
     path(
