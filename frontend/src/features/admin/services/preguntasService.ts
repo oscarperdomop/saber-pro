@@ -10,6 +10,18 @@ type PreguntasRawResponse = Pregunta[] | PreguntasPaginadasResponse
 type ModulosRawResponse = Modulo[] | { results?: Modulo[] }
 type OpcionIAResponse = { texto?: string; es_correcta?: boolean }
 type GenerarOpcionesIAResponse = OpcionIAResponse[] | { opciones?: OpcionIAResponse[] }
+type PreviewLatexResponse = {
+  status?: string
+  pdf_base64?: string
+  preview_png_base64?: string
+  detalle?: string
+  detail?: string
+}
+
+export interface PreviewLatexResult {
+  pdfBase64: string
+  pngBase64?: string
+}
 type ActualizarPreguntaApiResponse =
   | Pregunta
   | {
@@ -27,6 +39,10 @@ export interface ActualizarPreguntaResult {
 
 export interface CargaMasivaPreguntasResponse {
   status: string
+  mensaje?: string
+  creadas?: number
+  omitidas?: number
+  sin_ia_por_error?: number
   preguntas_creadas: number
   filas_con_ia: number
   filas_omitidas?: number
@@ -40,6 +56,27 @@ export interface RevertirCargaMasivaResponse {
   mensaje: string
 }
 
+export interface BulkUpdateEstadoPreguntasResponse {
+  status: string
+  actualizados: number
+  sin_cambio: number
+  bloqueadas_historial: number
+  no_encontrados: number
+  estado_aplicado: 'Publicada' | 'Borrador' | 'Archivada' | string
+}
+
+export interface PlantillaCargaMasivaDownload {
+  blob: Blob
+  filename: string
+}
+
+export interface EliminarPreguntaResponse {
+  status?: string
+  tipo_eliminacion?: 'logica' | 'fisica'
+  pregunta_id?: string
+  mensaje?: string
+}
+
 export interface PreguntaCriticaRow extends Pregunta {
   tasa_error: number
   total_respondidas: number
@@ -50,6 +87,15 @@ export interface PreguntasCriticasResponse {
   umbral: number
   total: number
   results: PreguntaCriticaRow[]
+}
+
+export interface GetPreguntasParams {
+  moduloId?: number | string
+  moduloNombre?: string
+  estado?: 'Todas' | 'Publicada' | 'Borrador' | 'Archivada' | string
+  tipoPregunta?: 'Todos' | 'Opcion Multiple' | 'Ensayo' | string
+  dificultad?: 'Todas' | 'Fácil' | 'Facil' | 'Media' | 'Alta' | string
+  ordering?: '-created_at' | 'created_at' | 'enunciado' | '-enunciado' | string
 }
 
 const getDificultad = (pregunta: Pregunta): string => {
@@ -83,7 +129,7 @@ const normalizePregunta = (pregunta: Pregunta): Pregunta => {
       ? modulo
       : {
           id: Number(pregunta.modulo_id ?? modulo ?? 0),
-          nombre: pregunta.modulo_nombre ?? `Modulo ${String(modulo ?? pregunta.modulo_id ?? '')}`,
+          nombre: pregunta.modulo_nombre ?? `Módulo ${String(modulo ?? pregunta.modulo_id ?? '')}`,
           descripcion: '',
         }
 
@@ -116,9 +162,36 @@ const mapPreguntaPayloadToApi = (payload: PreguntaPayload) => {
   }
 }
 
-export const getPreguntas = async (incluirArchivadas: boolean = false): Promise<Pregunta[]> => {
+export const getPreguntas = async (
+  incluirArchivadas: boolean = false,
+  filtros?: GetPreguntasParams,
+): Promise<Pregunta[]> => {
+  const params: Record<string, string | number | boolean> = {
+    incluir_archivadas: incluirArchivadas,
+  }
+
+  if (typeof filtros?.moduloId === 'number' || String(filtros?.moduloId ?? '').trim()) {
+    params.modulo_id = String(filtros?.moduloId).trim()
+  }
+  if (String(filtros?.moduloNombre ?? '').trim()) {
+    params.modulo_nombre = String(filtros?.moduloNombre).trim()
+  }
+  if (filtros?.estado && filtros.estado !== 'Todas') {
+    params.estado = filtros.estado
+  }
+  if (filtros?.tipoPregunta && filtros.tipoPregunta !== 'Todos') {
+    params.tipo_pregunta = filtros.tipoPregunta
+  }
+  if (filtros?.dificultad && filtros.dificultad !== 'Todas') {
+    params.dificultad = filtros.dificultad
+  }
+  if (String(filtros?.ordering ?? '').trim()) {
+    params.ordering = String(filtros?.ordering).trim()
+  }
+
   const { data } = await axiosInstance.get<PreguntasRawResponse>(
-    `/evaluaciones/admin/preguntas/?incluir_archivadas=${incluirArchivadas}`,
+    '/evaluaciones/admin/preguntas/',
+    { params },
   )
   const preguntas = Array.isArray(data)
     ? data
@@ -215,6 +288,29 @@ export const cambiarEstadoPregunta = async ({
   return response.data
 }
 
+export const bulkUpdateEstadoPreguntas = async ({
+  ids,
+  estado,
+}: {
+  ids: Array<number | string>
+  estado: string
+}): Promise<BulkUpdateEstadoPreguntasResponse> => {
+  const { data } = await axiosInstance.patch<BulkUpdateEstadoPreguntasResponse>(
+    '/evaluaciones/admin/preguntas/bulk-update-estado/',
+    { ids, estado },
+  )
+  return data
+}
+
+export const eliminarPregunta = async (
+  id: number | string,
+): Promise<EliminarPreguntaResponse> => {
+  const { data } = await axiosInstance.delete<EliminarPreguntaResponse>(
+    `/evaluaciones/admin/preguntas/${id}/`,
+  )
+  return data ?? {}
+}
+
 export const generarOpcionesIA = async ({
   enunciado,
   contexto,
@@ -238,19 +334,38 @@ export const generarOpcionesIA = async ({
   }))
 }
 
+export const previsualizarLatex = async (textoLatex: string): Promise<PreviewLatexResult> => {
+  const { data } = await axiosInstance.post<PreviewLatexResponse>('/evaluaciones/ia/preview-latex/', {
+    texto_latex: textoLatex,
+  })
+
+  const pdfBase64 = String(data?.pdf_base64 ?? '').trim()
+  if (!pdfBase64) {
+    throw new Error(String(data?.detalle ?? data?.detail ?? 'No se pudo generar la vista previa LaTeX.'))
+  }
+
+  return {
+    pdfBase64,
+    pngBase64: String(data?.preview_png_base64 ?? '').trim() || undefined,
+  }
+}
+
 export const cargaMasivaPreguntas = async ({
   file,
   moduloId,
   categoriaId,
   competenciaId,
+  usarIA = true,
 }: {
   file: File
   moduloId?: number
   categoriaId?: number
   competenciaId?: number
+  usarIA?: boolean
 }): Promise<CargaMasivaPreguntasResponse> => {
   const formData = new FormData()
   formData.append('archivo', file)
+  formData.append('usar_ia', usarIA ? 'true' : 'false')
   if (typeof moduloId === 'number') {
     formData.append('modulo_id', String(moduloId))
   }
@@ -272,11 +387,41 @@ export const cargaMasivaPreguntas = async ({
   return data
 }
 
-export const descargarPlantillaCargaMasivaPreguntas = async (): Promise<Blob> => {
-  const { data } = await axiosInstance.get('/evaluaciones/admin/preguntas/plantilla-carga/', {
+const getFilenameFromContentDisposition = (headerValue?: string): string | null => {
+  const value = String(headerValue ?? '')
+  if (!value) {
+    return null
+  }
+
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]).replace(/["']/g, '')
+  }
+
+  const filenameMatch = value.match(/filename="?([^"]+)"?/i)
+  if (filenameMatch?.[1]) {
+    return filenameMatch[1].trim()
+  }
+
+  return null
+}
+
+export const descargarPlantillaCargaMasivaPreguntas = async (
+  moduloId?: number,
+): Promise<PlantillaCargaMasivaDownload> => {
+  const { data, headers } = await axiosInstance.get('/evaluaciones/admin/preguntas/plantilla-carga/', {
+    params: typeof moduloId === 'number' ? { modulo_id: moduloId } : undefined,
     responseType: 'blob',
   })
-  return data as Blob
+
+  const filename =
+    getFilenameFromContentDisposition(headers?.['content-disposition']) ??
+    'plantilla_preguntas_generica.xlsx'
+
+  return {
+    blob: data as Blob,
+    filename,
+  }
 }
 
 export const revertirCargaMasiva = async (
@@ -334,7 +479,10 @@ const preguntasService = {
   crearPregunta,
   actualizarPregunta,
   cambiarEstadoPregunta,
+  bulkUpdateEstadoPreguntas,
+  eliminarPregunta,
   generarOpcionesIA,
+  previsualizarLatex,
   cargaMasivaPreguntas,
   descargarPlantillaCargaMasivaPreguntas,
   revertirCargaMasiva,

@@ -21,6 +21,13 @@ const getMisIntentos = async (): Promise<IntentoPrevio[]> => {
   return Array.isArray(data) ? data : []
 }
 
+const getIntentoById = async (intentoId: string): Promise<IntentoPrevio> => {
+  const { data } = await axiosInstance.get<IntentoPrevio>(
+    `/evaluaciones/estudiante/mis-intentos/${intentoId}/`,
+  )
+  return data
+}
+
 const iniciarIntento = async (plantillaId: string): Promise<IniciarIntentoResponse> => {
   const { data } = await axiosInstance.post<IniciarIntentoResponse>(
     `/evaluaciones/estudiante/examenes/${plantillaId}/iniciar_intento/`,
@@ -66,6 +73,7 @@ const estudianteService = {
   getExamenesDisponibles,
   getSimulacrosDisponibles,
   getMisIntentos,
+  getIntentoById,
   iniciarIntento,
   getRespuestasIntento,
   guardarRespuesta,
@@ -80,6 +88,7 @@ export {
   generarPlanEstudioIA,
   getExamenesDisponibles,
   getMisIntentos,
+  getIntentoById,
   getRespuestasIntento,
   getSimulacrosDisponibles,
   getResumenResultados,

@@ -13,6 +13,8 @@ import type { Modulo } from '../../../types/preguntas'
 interface ApiErrorResponse {
   detail?: string
   detalle?: string
+  error?: string
+  detalle_tecnico?: string
   [key: string]: unknown
 }
 
@@ -41,6 +43,10 @@ const CrearPreguntaPage = () => {
   const [imagenGrafica, setImagenGrafica] = useState<File | null>(null)
   const [imagenGraficaPreview, setImagenGraficaPreview] = useState<string | null>(null)
   const [codigoLatex, setCodigoLatex] = useState('')
+  const [previewPdf, setPreviewPdf] = useState('')
+  const [previewPng, setPreviewPng] = useState('')
+  const [previewError, setPreviewError] = useState('')
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [limitePalabras, setLimitePalabras] = useState<number>(300)
   const [opciones, setOpciones] = useState<OpcionForm[]>([
     { texto: '', es_correcta: true, imagen: null, previewUrl: null },
@@ -188,6 +194,9 @@ const CrearPreguntaPage = () => {
 
     if (value !== 'LATEX') {
       setCodigoLatex('')
+      setPreviewPdf('')
+      setPreviewPng('')
+      setPreviewError('')
     }
   }
 
@@ -198,6 +207,41 @@ const CrearPreguntaPage = () => {
 
     setImagenGrafica(file)
     setImagenGraficaPreview(file ? URL.createObjectURL(file) : null)
+  }
+
+  const handlePreviewLatex = async () => {
+    const snippet = codigoLatex.trim()
+    if (!snippet) {
+      setPreviewPdf('')
+      setPreviewPng('')
+      setPreviewError('Escribe primero un fragmento LaTeX para previsualizar.')
+      return
+    }
+
+    setIsLoadingPreview(true)
+    setPreviewError('')
+
+    try {
+      const preview = await preguntasService.previsualizarLatex(snippet)
+      setPreviewPdf(preview.pdfBase64)
+      setPreviewPng(preview.pngBase64 ?? '')
+    } catch (error) {
+      const axiosError = error as AxiosError<ApiErrorResponse>
+      const responseData = axiosError.response?.data
+      const baseMessage =
+        responseData?.detalle ??
+        responseData?.detail ??
+        responseData?.error ??
+        'No fue posible compilar el codigo LaTeX.'
+      const detalleTecnico = responseData?.detalle_tecnico
+      setPreviewPdf('')
+      setPreviewPng('')
+      setPreviewError(
+        detalleTecnico ? `${String(baseMessage)}\n${String(detalleTecnico)}` : String(baseMessage),
+      )
+    } finally {
+      setIsLoadingPreview(false)
+    }
   }
 
   const opcionesValidas = useMemo(
@@ -211,7 +255,7 @@ const CrearPreguntaPage = () => {
 
   const validarFormulario = (): string | null => {
     if (moduloId === '') {
-      return 'Debes seleccionar un modulo.'
+      return 'Debes seleccionar un módulo.'
     }
 
     if (!enunciado.trim()) {
@@ -219,7 +263,7 @@ const CrearPreguntaPage = () => {
     }
 
     if (categoriaId === '') {
-      return 'Debes seleccionar una categoria.'
+      return 'Debes seleccionar una categoría.'
     }
 
     if (competenciaId === '') {
@@ -374,7 +418,7 @@ const CrearPreguntaPage = () => {
   }
 
   return (
-    <section className="mx-auto w-full max-w-7xl space-y-5">
+    <section className="bank-scope mx-auto w-full max-w-7xl space-y-5">
       <header className="flex flex-col gap-3">
         <button
           type="button"
@@ -391,7 +435,7 @@ const CrearPreguntaPage = () => {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <section className="space-y-4 rounded-2xl border border-usco-ocre/80 bg-white p-5 shadow-sm">
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-usco-gris">Modulo</span>
+              <span className="mb-1 block text-sm font-semibold text-usco-gris">Módulo</span>
               <select
                 value={moduloId}
                 onChange={(event) => setModuloId(Number(event.target.value))}
@@ -400,10 +444,10 @@ const CrearPreguntaPage = () => {
                 required
               >
                 {cargandoModulos ? (
-                  <option value="">Cargando modulos...</option>
+                  <option value="">Cargando módulos...</option>
                 ) : (
                   <>
-                    <option value="">Selecciona un modulo</option>
+                    <option value="">Selecciona un módulo</option>
                     {(modulos ?? []).map((modulo) => (
                       <option key={modulo.id} value={modulo.id}>
                         {modulo.nombre}
@@ -416,7 +460,7 @@ const CrearPreguntaPage = () => {
 
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">
-                Categoria o Contenido
+                Categoría o Contenido
               </span>
               <select
                 value={categoriaId}
@@ -425,7 +469,7 @@ const CrearPreguntaPage = () => {
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15 disabled:bg-gray-100"
               >
                 <option value="" disabled>
-                  -- Selecciona una categoria --
+                  -- Selecciona una categoría --
                 </option>
                 {categorias?.map((categoria) => (
                   <option key={categoria.id} value={categoria.id}>
@@ -563,13 +607,53 @@ const CrearPreguntaPage = () => {
 
               {soporteMultimedia === 'LATEX' && (
                 <div className="mt-3 space-y-2">
+                  <p className="rounded-lg border border-usco-ocre/70 bg-white p-2 text-xs text-usco-gris">
+                    Pega unicamente el fragmento de codigo de la grafica o pregunta (por ejemplo:
+                    <span className="font-semibold"> \begin{'{'}tikzpicture{'}'}...\end{'{'}tikzpicture{'}'} </span>
+                    o <span className="font-semibold">\begin{'{'}pregunta{'}'}...\end{'{'}pregunta{'}'}</span>).
+                    No incluyas <span className="font-semibold">\documentclass</span> ni
+                    <span className="font-semibold"> \begin{'{'}document{'}'}</span>.
+                  </p>
                   <textarea
                     value={codigoLatex}
-                    onChange={(event) => setCodigoLatex(event.target.value)}
+                    onChange={(event) => {
+                      setCodigoLatex(event.target.value)
+                      setPreviewError('')
+                    }}
                     rows={4}
                     placeholder="$\\frac{2}{1212}$"
                     className="w-full rounded border border-gray-300 p-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                   />
+                  <button
+                    type="button"
+                    onClick={handlePreviewLatex}
+                    disabled={isLoadingPreview}
+                    className="inline-flex items-center rounded-lg border border-usco-vino/40 bg-white px-3 py-2 text-xs font-semibold text-usco-vino transition hover:bg-usco-vino/5 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isLoadingPreview ? 'Compilando...' : '⚡ Previsualizar LaTeX'}
+                  </button>
+                  {previewError && (
+                    <div className="whitespace-pre-wrap rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-700">
+                      {previewError}
+                    </div>
+                  )}
+                  {previewPng ? (
+                    <div className="overflow-hidden rounded-lg border border-usco-ocre/60 bg-white p-2">
+                      <img
+                        src={`data:image/png;base64,${previewPng}`}
+                        alt="Vista previa LaTeX"
+                        className="mx-auto max-h-64 w-auto object-contain"
+                      />
+                    </div>
+                  ) : previewPdf ? (
+                    <div className="overflow-hidden rounded-lg border border-usco-ocre/60 bg-white">
+                      <iframe
+                        title="Vista previa PDF LaTeX"
+                        src={`data:application/pdf;base64,${previewPdf}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                        className="h-56 w-full"
+                      />
+                    </div>
+                  ) : null}
                   <KaTeXPreview text={codigoLatex} label="Vista previa LaTeX" />
                 </div>
               )}

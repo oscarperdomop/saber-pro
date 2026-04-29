@@ -14,6 +14,12 @@ export const useAuth = () => {
 
   return useMutation<LoginResponse, AxiosError<LoginErrorResponse>, LoginCredentials>({
     mutationFn: authService.login,
+    onMutate: () => {
+      localStorage.removeItem('token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('user')
+      window.dispatchEvent(new Event('auth-changed'))
+    },
     onSuccess: (data) => {
       const role = data.rol
       const userData: User = {
@@ -29,6 +35,7 @@ export const useAuth = () => {
       localStorage.setItem('token', data.access)
       localStorage.setItem('refresh_token', data.refresh)
       localStorage.setItem('user', JSON.stringify(userData))
+      window.dispatchEvent(new Event('auth-changed'))
 
       if (data.es_primer_ingreso) {
         navigate('/activar-cuenta')

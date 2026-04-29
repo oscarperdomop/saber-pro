@@ -78,7 +78,7 @@ const VisualizarPreguntaModal = ({ isOpen, onClose, pregunta }: VisualizarPregun
     pregunta.soporte_multimedia === 'LATEX' || Boolean((pregunta.codigo_latex ?? '').trim())
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+    <div className="bank-scope fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
       <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-usco-ocre/80 bg-white shadow-2xl">
         <header className="flex items-start justify-between gap-3 border-b border-usco-ocre/70 px-5 py-4">
           <div>

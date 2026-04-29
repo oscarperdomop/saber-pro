@@ -7,10 +7,13 @@ export interface PreguntaCritica {
   pregunta__enunciado: string
   total_veces: number
   veces_incorrecta: number
+  tasa_error?: number
 }
 
 export interface AnaliticasResponse {
   total_evaluaciones_finalizadas: number
+  total_preguntas_criticas: number
+  tasa_media_error_criticas: number
   participacion_por_programa: ParticipacionPrograma[]
   top_preguntas_criticas: PreguntaCritica[]
 }

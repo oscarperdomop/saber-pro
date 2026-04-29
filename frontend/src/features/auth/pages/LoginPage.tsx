@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from "react";
+import type { AxiosError } from "axios";
 import {
   ArrowRight,
   BarChart3,
@@ -13,39 +14,69 @@ import {
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
+interface LoginErrorResponse {
+  detail?: string | { message?: string; code?: string };
+  code?: string;
+}
+
 const LoginPage = () => {
   const [correoInstitucional, setCorreoInstitucional] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberSession, setRememberSession] = useState(true);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isInactiveAccountError, setIsInactiveAccountError] = useState(false);
 
   const loginMutation = useAuth();
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    loginMutation.mutate({
-      correo_institucional: correoInstitucional,
-      password,
-    });
+  const resolveLoginError = (error: unknown) => {
+    const axiosError = error as AxiosError<LoginErrorResponse>;
+    const errorData = axiosError?.response?.data;
+
+    const backendDetail =
+      typeof errorData?.detail === "string"
+        ? errorData.detail
+        : errorData?.detail?.message ?? "";
+
+    const backendCode =
+      errorData?.code ??
+      (typeof errorData?.detail === "object" ? errorData.detail?.code : undefined);
+
+    const inactive =
+      backendCode === "inactive_account" ||
+      (backendDetail ?? "").toLowerCase().includes("cuenta inactiva");
+
+    const message = inactive
+      ? "Tu cuenta ha sido desactivada por la institución. Por favor, comunícate con Soporte Técnico."
+      : backendDetail ||
+        "Credenciales incorrectas. Verifica tu correo institucional y contraseña.";
+
+    return { inactive, message };
   };
 
-  const errorData = loginMutation.error?.response?.data as
-    | { detail?: string | { message?: string; code?: string }; code?: string }
-    | undefined;
-  const backendDetail =
-    typeof errorData?.detail === "string"
-      ? errorData.detail
-      : errorData?.detail?.message ?? "";
-  const backendCode =
-    errorData?.code ??
-    (typeof errorData?.detail === "object" ? errorData.detail?.code : undefined);
-  const isInactiveAccountError =
-    backendCode === "inactive_account" ||
-    (backendDetail ?? "").toLowerCase().includes("cuenta inactiva");
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoginError(null);
+    setIsInactiveAccountError(false);
 
-  const errorMessage = isInactiveAccountError
-    ? "Tu cuenta ha sido desactivada por la institución. Por favor, comunícate con Soporte Técnico."
-    : backendDetail || "Credenciales incorrectas. Verifica tu correo institucional y contraseña.";
+    loginMutation.mutate(
+      {
+        correo_institucional: correoInstitucional,
+        password,
+      },
+      {
+        onError: (error) => {
+          const parsed = resolveLoginError(error);
+          setIsInactiveAccountError(parsed.inactive);
+          setLoginError(parsed.message);
+        },
+        onSuccess: () => {
+          setLoginError(null);
+          setIsInactiveAccountError(false);
+        },
+      },
+    );
+  };
 
   const features = [
     {
@@ -56,7 +87,7 @@ const LoginPage = () => {
     {
       icon: BarChart3,
       title: "Analítica de Resultados",
-      description: "Monitorea tu avance por modulos y competencias.",
+      description: "Monitorea tu avance por módulos y competencias.",
     },
     {
       icon: Users,
@@ -90,7 +121,7 @@ const LoginPage = () => {
                 Ingresa a tu entorno académico institucional
               </h2>
               <p className="mt-4 text-lg text-white/80">
-                Gestiona simulacros, resultados y analítica con identidad
+                Gestiona simulacros, resultados y Analítica con identidad
                 oficial USCO.
               </p>
             </div>
@@ -186,7 +217,7 @@ const LoginPage = () => {
                     type="button"
                     className="text-xs font-semibold text-usco-vino hover:underline"
                   >
-                    Olvidaste tu contraseña?
+                    ¿Olvidaste tu contraseña?
                   </button>
                 </div>
                 <div className="relative">
@@ -205,7 +236,7 @@ const LoginPage = () => {
                     type="button"
                     onClick={() => setShowPassword((previous) => !previous)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-usco-gris/70 transition hover:text-usco-vino"
-                    aria-label="Mostrar u ocultar contrasena"
+                    aria-label="Mostrar u ocultar contraseña"
                   >
                     {showPassword ? (
                       <EyeOff className="h-5 w-5" />
@@ -226,7 +257,7 @@ const LoginPage = () => {
                 Mantener sesión iniciada
               </label>
 
-              {loginMutation.isError && (
+              {loginError && (
                 <div
                   className={`rounded-xl border px-4 py-3 text-sm ${
                     isInactiveAccountError
@@ -234,7 +265,7 @@ const LoginPage = () => {
                       : "border-red-300 bg-red-50 text-red-700"
                   }`}
                 >
-                  {errorMessage}
+                  {loginError}
                 </div>
               )}
 
@@ -266,7 +297,7 @@ const LoginPage = () => {
             </div>
 
             <p className="text-center text-sm text-usco-gris/90">
-              Problemas para ingresar?{" "}
+              ¿Problemas para ingresar?{" "}
               <button
                 type="button"
                 className="font-semibold text-usco-vino hover:underline"

@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Sparkles } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import SaberProLoader from '../../../components/ui/SaberProLoader'
 import estudianteService from '../services/estudianteService'
 import type { PuntajeModuloResultado, ResumenResultados } from '../../../types/evaluaciones'
@@ -12,6 +12,8 @@ interface ApiErrorResponse {
   detail?: string
   detalle?: string
   error?: string
+  fecha_disponible?: string
+  simulacro?: string
 }
 
 const clampPercentil = (value: number): number => {
@@ -80,6 +82,7 @@ const PercentileScale = ({
 
 const ResultadosExamenPage = () => {
   const { intentoId } = useParams<{ intentoId: string }>()
+  const navigate = useNavigate()
   const [planIA, setPlanIA] = useState('')
 
   const {
@@ -113,7 +116,7 @@ const ResultadosExamenPage = () => {
   if (!intentoId) {
     return (
       <section className="rounded-xl border border-red-300 bg-red-50 p-6 text-sm text-red-700">
-        Intento no valido.
+        Intento no válido.
       </section>
     )
   }
@@ -127,12 +130,37 @@ const ResultadosExamenPage = () => {
   }
 
   if (isError && error.response?.status === 403) {
+    const fechaDisponibleRaw = error.response?.data?.fecha_disponible
+    const fechaDisponible = fechaDisponibleRaw
+      ? new Intl.DateTimeFormat('es-CO', {
+          dateStyle: 'full',
+          timeStyle: 'short',
+        }).format(new Date(fechaDisponibleRaw))
+      : null
+
     return (
-      <section className="rounded-2xl border border-usco-ocre/80 bg-white p-10 text-center shadow-sm">
-        <h1 className="text-4xl font-bold text-usco-vino">
-          Examen Finalizado! Tus resultados estaran disponibles cuando cierre la ventana del
-          simulacro.
+      <section className="rounded-2xl border border-usco-ocre/80 bg-white p-8 text-center shadow-sm">
+        <h1 className="text-3xl font-bold text-usco-vino md:text-4xl">
+          Examen finalizado. Tus resultados aún no están habilitados.
         </h1>
+        <p className="mx-auto mt-4 max-w-3xl text-base text-usco-gris">
+          La institución configuró este simulacro para mostrar resultados al cierre oficial.
+          {fechaDisponible && (
+            <>
+              {' '}
+              Estarán disponibles el <span className="font-semibold text-usco-vino">{fechaDisponible}</span>.
+            </>
+          )}
+        </p>
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={() => navigate('/resultados')}
+            className="rounded-xl border border-usco-gris/40 bg-white px-4 py-2 text-sm font-semibold text-usco-gris transition hover:border-usco-vino hover:text-usco-vino"
+          >
+            Volver a Resultados
+          </button>
+        </div>
       </section>
     )
   }
@@ -158,6 +186,16 @@ const ResultadosExamenPage = () => {
 
   return (
     <section className="mx-auto w-full max-w-5xl space-y-5">
+      <div>
+        <button
+          type="button"
+          onClick={() => navigate('/resultados')}
+          className="rounded-xl border border-usco-gris/40 bg-white px-4 py-2 text-sm font-semibold text-usco-gris transition hover:border-usco-vino hover:text-usco-vino"
+        >
+          Volver a Resultados
+        </button>
+      </div>
+
       <header className="rounded-2xl border border-usco-gris/50 bg-white px-6 py-5 text-center shadow-sm">
         <p className="text-xs uppercase tracking-[0.16em] text-usco-gris">Puntaje Saber Pro</p>
         <p className="mt-2 text-5xl font-bold text-usco-vino md:text-[64px]">{data.puntaje_saber_pro}</p>
@@ -168,20 +206,20 @@ const ResultadosExamenPage = () => {
 
       {data.estado_calificacion === 'Parcial' && (
         <aside className="rounded-xl border border-yellow-300 bg-usco-ocre p-4 text-sm text-yellow-900">
-          Tu nota es parcial porque tienes ensayos pendientes de calificacion por un profesor.
+          Tu nota es parcial porque tienes ensayos pendientes de calificación por un profesor.
         </aside>
       )}
 
       <section className="space-y-2.5">
         <h2 className="text-center text-xl font-semibold tracking-wide text-usco-gris md:text-2xl">
-          •RESULTADOS POR MODULOS•
+          •RESULTADOS POR MÓDULOS•
         </h2>
 
         <div className="overflow-x-auto border-2 border-usco-gris/80 bg-white shadow-sm">
           <div className="min-w-[760px]">
             <div className="border-b-2 border-usco-gris/80 bg-usco-vino px-4 py-2.5 text-center">
               <p className="text-sm font-bold uppercase tracking-wide text-white md:text-base">
-                MODULOS COMPETENCIAS GENERICAS
+                MÓDULOS COMPETENCIAS GENÉRICAS
               </p>
             </div>
 
@@ -189,13 +227,13 @@ const ResultadosExamenPage = () => {
               <thead>
                 <tr className="border-b-2 border-usco-gris/80 bg-usco-fondo">
                   <th className="w-[30%] border-r-2 border-usco-gris/80 px-3 py-2.5 text-left text-sm font-semibold text-usco-gris md:text-lg">
-                    MODULOS
+                    MÓDULOS
                   </th>
                   <th className="w-[20%] border-r-2 border-usco-gris/80 px-3 py-2.5 text-center text-sm font-semibold text-usco-gris md:text-lg">
-                    PUNTAJE POR MODULO
+                    PUNTAJE POR MÓDULO
                   </th>
                   <th className="w-[50%] px-3 py-2.5 text-center text-sm font-semibold text-usco-gris md:text-lg">
-                    EN QUE PERCENTIL SE ENCUENTRA?
+                    ¿EN QUÉ PERCENTIL SE ENCUENTRA?
                   </th>
                 </tr>
                 <tr className="border-b-2 border-usco-gris/80 bg-white">
@@ -211,7 +249,7 @@ const ResultadosExamenPage = () => {
                 {modulos.length === 0 && (
                   <tr>
                     <td colSpan={3} className="px-5 py-6 text-sm text-usco-gris">
-                      No hay desglose por modulos disponible para este intento.
+                      No hay desglose por módulos disponible para este intento.
                     </td>
                   </tr>
                 )}
@@ -289,7 +327,7 @@ const ResultadosExamenPage = () => {
             </article>
           ) : (
             <div className="py-8 text-center text-gray-500">
-              Haz clic en el boton de arriba para que la Inteligencia Artificial analice tus
+              Haz clic en el botón de arriba para que la Inteligencia Artificial analice tus
               errores y te cree una ruta de estudio personalizada.
             </div>
           )}
@@ -308,3 +346,4 @@ const ResultadosExamenPage = () => {
 }
 
 export default ResultadosExamenPage
+

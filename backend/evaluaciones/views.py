@@ -1,7 +1,9 @@
+import csv
 import json
 import re
+import time
 import uuid
-from io import StringIO
+from io import BytesIO, StringIO
 import unicodedata
 from decimal import Decimal
 
@@ -9,15 +11,18 @@ import google.generativeai as genai
 import pandas as pd
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Avg, Case, Count, ExpressionWrapper, F, FloatField, Q, Value, When
+from django.db.models import Avg, Case, Count, DurationField, ExpressionWrapper, F, FloatField, Q, Value, When
 from django.db.models.functions import Cast
 from django.http import HttpResponse
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from core.permissions import IsOwnerOrSupremo
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -33,7 +38,7 @@ from .models import (
     RespuestaEstudiante,
 )
 from users.models import ProgramaAcademico, Usuario
-from .utils import autocompletar_distractores
+from .utils import compilar_preview_latex_base64, obtener_distractores_ia
 from .serializers import (
     CategoriaAdminSerializer,
     CalificarEnsayoSerializer,
@@ -167,6 +172,47 @@ Enunciado: {enunciado}
             )
 
 
+class LaTeXPreviewView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        texto_latex = str(request.data.get('texto_latex') or '').strip()
+        if not texto_latex:
+            return Response(
+                {
+                    'status': 'error',
+                    'detalle': 'El campo texto_latex es obligatorio.',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        timeout_seconds = int(getattr(settings, 'LATEX_PREVIEW_TIMEOUT_SECONDS', 5) or 5)
+        timeout_seconds = max(3, min(timeout_seconds, 5))
+        pdf_base64, png_base64, compile_error = compilar_preview_latex_base64(
+            texto_latex,
+            timeout_seconds=timeout_seconds,
+        )
+
+        if compile_error:
+            return Response(
+                {
+                    'status': 'error',
+                    'detalle': 'No fue posible compilar el codigo LaTeX.',
+                    'detalle_tecnico': compile_error,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                'status': 'ok',
+                'pdf_base64': pdf_base64,
+                'preview_png_base64': png_base64,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class PreguntaAdminViewSet(viewsets.ModelViewSet):
     queryset = Pregunta.objects.all().order_by('created_at', 'id')
     serializer_class = PreguntaAdminSerializer
@@ -180,9 +226,51 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
             or self.request.query_params.get('include_archivadas')
             or ''
         ).strip().lower() in ['1', 'true', 'yes']
+        modulo_id = str(self.request.query_params.get('modulo_id') or '').strip()
+        modulo_nombre = str(self.request.query_params.get('modulo_nombre') or '').strip()
+        estado = str(self.request.query_params.get('estado') or '').strip()
+        estado_normalizado = estado.lower()
+        tipo_pregunta = str(self.request.query_params.get('tipo_pregunta') or '').strip()
+        dificultad = str(self.request.query_params.get('dificultad') or '').strip()
+        ordering = str(self.request.query_params.get('ordering') or '').strip()
+
+        # "Todas/Todos" debe significar sin filtro de estado e incluir archivadas.
+        if estado_normalizado in ['todas', 'todos']:
+            estado = ''
+            incluir_archivadas = True
 
         if self.action == 'list' and not incluir_archivadas:
             queryset = queryset.exclude(estado='Archivada')
+
+        if modulo_id:
+            queryset = queryset.filter(modulo_id=modulo_id)
+
+        if modulo_nombre:
+            queryset = queryset.filter(modulo__nombre__iexact=modulo_nombre)
+
+        if estado:
+            queryset = queryset.filter(estado__iexact=estado)
+
+        if tipo_pregunta:
+            queryset = queryset.filter(tipo_pregunta=tipo_pregunta)
+
+        if dificultad:
+            nivel_map = {
+                'facil': 'Facil',
+                'fácil': 'Facil',
+                'media': 'Medio',
+                'medio': 'Medio',
+                'alta': 'Dificil',
+                'dificil': 'Dificil',
+                'difícil': 'Dificil',
+            }
+            dificultad_normalizada = nivel_map.get(dificultad.lower())
+            if dificultad_normalizada:
+                queryset = queryset.filter(nivel_dificultad=dificultad_normalizada)
+
+        allowed_ordering = {'created_at', '-created_at', 'enunciado', '-enunciado'}
+        if ordering in allowed_ordering:
+            queryset = queryset.order_by(ordering, 'id')
 
         return queryset
 
@@ -195,6 +283,20 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
             'Medio': 'Medio',
             'Dificil': 'Dificil',
         }.get(str(dificultad or '').strip(), 'Medio')
+
+    @staticmethod
+    def _map_estado_masivo(estado):
+        estado_limpio = str(estado or '').strip().lower()
+        estado_map = {
+            'publicada': 'Publicada',
+            'activo': 'Publicada',
+            'activa': 'Publicada',
+            'borrador': 'Borrador',
+            'inactivo': 'Borrador',
+            'inactiva': 'Borrador',
+            'archivada': 'Archivada',
+        }
+        return estado_map.get(estado_limpio)
 
     @staticmethod
     def _to_bool(value):
@@ -375,6 +477,14 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
         text = text.upper()
         text = re.sub(r'[^A-Z0-9]+', '_', text).strip('_')
         return text
+
+    @staticmethod
+    def _sanitize_filename_fragment(value):
+        text = str(value or '').strip()
+        text = unicodedata.normalize('NFKD', text)
+        text = ''.join(char for char in text if not unicodedata.combining(char))
+        text = re.sub(r'[^A-Za-z0-9]+', '_', text).strip('_')
+        return text or 'generica'
 
     @classmethod
     def _read_cell(cls, row, *keys):
@@ -683,13 +793,169 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
 
         return Response(self.get_serializer(pregunta).data)
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        pregunta_id = str(instance.id)
+        tiene_respuestas = RespuestaEstudiante.objects.filter(pregunta=instance).exists()
+
+        if tiene_respuestas:
+            if instance.estado != 'Archivada':
+                instance.estado = 'Archivada'
+                instance.save(update_fields=['estado', 'updated_at'])
+                mensaje = (
+                    'La pregunta tiene respuestas asociadas y fue archivada '
+                    'para conservar la trazabilidad historica.'
+                )
+            else:
+                mensaje = (
+                    'La pregunta ya se encontraba archivada porque tiene '
+                    'respuestas asociadas.'
+                )
+
+            return Response(
+                {
+                    'status': 'OK',
+                    'tipo_eliminacion': 'logica',
+                    'pregunta_id': pregunta_id,
+                    'mensaje': mensaje,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        self.perform_destroy(instance)
+        return Response(
+            {
+                'status': 'OK',
+                'tipo_eliminacion': 'fisica',
+                'pregunta_id': pregunta_id,
+                'mensaje': 'Pregunta eliminada permanentemente de la base de datos.',
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=False,
+        methods=['patch'],
+        url_path='bulk-update-estado',
+        permission_classes=[IsAuthenticated, IsAdminUser],
+    )
+    def bulk_update_estado(self, request):
+        ids = request.data.get('ids')
+        estado_destino = self._map_estado_masivo(request.data.get('estado'))
+
+        if not isinstance(ids, list) or not ids:
+            return Response(
+                {'detalle': 'Debes enviar una lista no vacia en el campo ids.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ids_unicos = []
+        vistos = set()
+        for value in ids:
+            raw_id = str(value or '').strip()
+            if not raw_id or raw_id in vistos:
+                continue
+            ids_unicos.append(raw_id)
+            vistos.add(raw_id)
+
+        if not ids_unicos:
+            return Response(
+                {'detalle': 'No se recibieron IDs validos para actualizar.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not estado_destino:
+            return Response(
+                {
+                    'detalle': (
+                        "Estado invalido. Usa uno de: 'Publicada', 'Borrador' o 'Archivada'."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        queryset = self.get_queryset().filter(id__in=ids_unicos)
+        encontrados = queryset.count()
+        no_encontrados = max(len(ids_unicos) - encontrados, 0)
+
+        if encontrados == 0:
+            return Response(
+                {'detalle': 'No se encontraron preguntas para los IDs enviados.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        bloqueadas_historial = queryset.filter(estado='Archivada').count()
+        queryset_editable = queryset.exclude(estado='Archivada')
+        sin_cambio = queryset_editable.filter(estado=estado_destino).count()
+        actualizados = queryset_editable.exclude(estado=estado_destino).update(
+            estado=estado_destino,
+            updated_at=timezone.now(),
+        )
+
+        return Response(
+            {
+                'status': 'ok',
+                'actualizados': actualizados,
+                'sin_cambio': sin_cambio,
+                'bloqueadas_historial': bloqueadas_historial,
+                'no_encontrados': no_encontrados,
+                'estado_aplicado': estado_destino,
+            },
+            status=status.HTTP_200_OK,
+        )
+
     @action(detail=False, methods=['get'], url_path='plantilla-carga')
-    def plantilla_carga(self, _request):
+    def plantilla_carga(self, request):
+        modulo_id = str(request.query_params.get('modulo_id') or '').strip()
+        modulo_nombre = str(request.query_params.get('modulo_nombre') or '').strip()
+        modulo_param = str(request.query_params.get('modulo') or '').strip()
+
+        modulo_seleccionado = None
+
+        if modulo_id:
+            if not modulo_id.isdigit():
+                return Response(
+                    {'detalle': 'El parametro modulo_id es invalido.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            modulo_seleccionado = ModuloPrueba.objects.filter(id=int(modulo_id)).first()
+            if modulo_seleccionado is None:
+                return Response(
+                    {'detalle': 'No existe un modulo con el modulo_id enviado.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            modulo_lookup = modulo_nombre or modulo_param
+            if modulo_lookup:
+                modulo_seleccionado = self._resolve_modulo(modulo_lookup)
+                if modulo_seleccionado is None:
+                    return Response(
+                        {'detalle': 'No existe un modulo con el nombre enviado.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        modulo_fijo = str(getattr(modulo_seleccionado, 'nombre', '') or '').strip()
+        categorias_modulo = []
+        competencias_modulo = []
+
+        if modulo_seleccionado is not None:
+            categorias_modulo = list(
+                Categoria.objects.filter(modulo=modulo_seleccionado)
+                .order_by('nombre')
+                .values_list('nombre', flat=True)
+            )
+            competencias_modulo = list(
+                Competencia.objects.filter(modulo=modulo_seleccionado)
+                .order_by('nombre')
+                .values_list('nombre', flat=True)
+            )
+
         rows = [
             [
                 'Razonamiento Cuantitativo',
-                'Resuelve: $x^2 - x - 6 = 0$. Cual es una raiz?',
-                'Álgebra y cálculo',
+                'Resuelve: x^2 - x - 6 = 0. Cual es una raiz?',
+                'Algebra y calculo',
                 'Interpretacion y representacion',
                 '3',
                 '',
@@ -701,7 +967,7 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
             [
                 'Razonamiento Cuantitativo',
                 'En un triangulo rectangulo, calcula la hipotenusa.',
-                'Geometría',
+                'Geometria',
                 'Resolucion de problemas',
                 '10',
                 '8',
@@ -713,7 +979,7 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
             [
                 'Razonamiento Cuantitativo',
                 'El promedio de 4, 6 y 8 es:',
-                'Estadística',
+                'Estadistica',
                 'Formulacion y ejecucion',
                 '6',
                 '5',
@@ -723,7 +989,7 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
                 'Publicada',
             ],
             [
-                'Lectura Crítica',
+                'Lectura Critica',
                 'Segun el texto, cual es la idea principal?',
                 'Lectura Critica',
                 'Comprension e interpretacion textual',
@@ -736,17 +1002,98 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
             ],
         ]
 
-        header = (
-            'MODULO;ENUNCIADO;CATEGORIA;COMPETENCIA;OPCION_CORRECTA;DISTRACTOR_1;'
-            'DISTRACTOR_2;DISTRACTOR_3;DIFICULTAD;ESTADO\r\n'
-        )
-        sample_csv = '\r\n'.join(';'.join(row) for row in rows)
-        content = '\ufeffsep=;\r\n' + header + sample_csv + '\r\n'
+        if modulo_fijo:
+            if categorias_modulo:
+                rows_dinamicas = []
+                for index, categoria_nombre in enumerate(categorias_modulo):
+                    competencia_derivada = (
+                        competencias_modulo[index % len(competencias_modulo)]
+                        if competencias_modulo
+                        else ''
+                    )
+                    rows_dinamicas.append(
+                        [
+                            modulo_fijo,
+                            f'Ejemplo de pregunta para la categoria {categoria_nombre}.',
+                            categoria_nombre,
+                            competencia_derivada,
+                            'Respuesta correcta de ejemplo',
+                            'Distractor 1 de ejemplo',
+                            'Distractor 2 de ejemplo',
+                            'Distractor 3 de ejemplo',
+                            'Media',
+                            'Borrador',
+                        ]
+                    )
+                rows = rows_dinamicas
+            else:
+                rows = [[modulo_fijo, *row[1:]] for row in rows]
 
-        response = HttpResponse(content, content_type='text/csv; charset=utf-8')
-        response['Content-Disposition'] = (
-            'attachment; filename="Plantilla_Carga_Masiva_Preguntas.csv"'
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = 'Plantilla Preguntas'
+
+        headers = [
+            'MODULO',
+            'ENUNCIADO',
+            'CATEGORIA',
+            'COMPETENCIA',
+            'OPCION_CORRECTA',
+            'DISTRACTOR_1',
+            'DISTRACTOR_2',
+            'DISTRACTOR_3',
+            'DIFICULTAD',
+            'ESTADO',
+        ]
+
+        worksheet.append(headers)
+        for row in rows:
+            worksheet.append(row)
+
+        header_fill = PatternFill(start_color='FF7A0019', end_color='FF7A0019', fill_type='solid')
+        header_font = Font(color='FFFFFFFF', bold=True)
+        predefinido_fill = PatternFill(start_color='FFFDE68A', end_color='FFFDE68A', fill_type='solid')
+
+        for column_index, _ in enumerate(headers, start=1):
+            cell = worksheet.cell(row=1, column=column_index)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+        if modulo_fijo:
+            for row_index in range(2, len(rows) + 2):
+                modulo_cell = worksheet.cell(row=row_index, column=1)
+                modulo_cell.value = modulo_fijo
+                modulo_cell.fill = predefinido_fill
+                modulo_cell.font = Font(bold=True, color='FF854D0E')
+
+        worksheet.freeze_panes = 'A2'
+        worksheet.column_dimensions['A'].width = 30
+        worksheet.column_dimensions['B'].width = 58
+        worksheet.column_dimensions['C'].width = 26
+        worksheet.column_dimensions['D'].width = 34
+        worksheet.column_dimensions['E'].width = 18
+        worksheet.column_dimensions['F'].width = 18
+        worksheet.column_dimensions['G'].width = 18
+        worksheet.column_dimensions['H'].width = 18
+        worksheet.column_dimensions['I'].width = 14
+        worksheet.column_dimensions['J'].width = 14
+
+        output = BytesIO()
+        workbook.save(output)
+        output.seek(0)
+
+        filename_base = (
+            f"plantilla_preguntas_{self._sanitize_filename_fragment(modulo_fijo)}"
+            if modulo_fijo
+            else 'plantilla_preguntas_generica'
         )
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename_base}.xlsx"'
         return response
 
     @action(
@@ -812,6 +1159,8 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        usar_ia_param = str(request.data.get('usar_ia', 'true')).strip().lower() == 'true'
+
         try:
             df = self._read_bulk_file(archivo)
         except Exception as exc:
@@ -821,8 +1170,10 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
         dificultad_default = self._map_dificultad(request.data.get('dificultad') or 'Media')
         nuevo_lote = uuid.uuid4()
 
-        preguntas_creadas = 0
+        creadas = 0
+        omitidas = 0
         filas_con_ia = 0
+        sin_ia_por_error = 0
         filas_omitidas = 0
         errores = []
 
@@ -878,6 +1229,16 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
                             'Cada fila debe incluir ENUNCIADO y OPCION_CORRECTA.'
                         )
 
+                    enunciado_limpio = str(enunciado).strip()
+                    existe_duplicado = Pregunta.objects.filter(
+                        enunciado__iexact=enunciado_limpio,
+                        modulo=modulo_final,
+                    ).exists()
+
+                    if existe_duplicado:
+                        omitidas += 1
+                        continue
+
                     contexto_texto = self._read_cell(
                         row, 'CONTEXTO', 'contexto', 'CONTEXTO_TEXTO', 'contexto_texto'
                     )
@@ -929,13 +1290,30 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
                     ]
                     distractores = [value for value in distractores_raw if value]
 
-                    if len(distractores) < 3:
-                        filas_con_ia += 1
-                        sugeridos = autocompletar_distractores(
-                            enunciado=enunciado,
-                            opcion_correcta=opcion_correcta,
-                            modulo_nombre=modulo_final.nombre,
-                        )
+                    if len(distractores) < 3 and usar_ia_param:
+                        longitud_inicial_distractores = len(distractores)
+                        try:
+                            sugeridos = obtener_distractores_ia(
+                                enunciado=enunciado_limpio,
+                                opcion_correcta=opcion_correcta,
+                                modulo=str(getattr(modulo_final, 'nombre', '') or '').strip() or 'General',
+                                categoria=str(getattr(categoria, 'nombre', '') or '').strip() or 'General',
+                            )
+                            # Throttling para respetar cuotas de la API gratuita.
+                            time.sleep(5)
+                        except Exception as exc:
+                            sin_ia_por_error += 1
+                            errores.append(
+                                {
+                                    'fila': fila_excel,
+                                    'error': (
+                                        "Error o cuota excedida en IA. "
+                                        f"Se guarda la pregunta sin distractores generados. Detalle: {str(exc)}"
+                                    ),
+                                }
+                            )
+                            sugeridos = []
+
                         for sugerido in sugeridos:
                             limpio = str(sugerido or '').strip()
                             if not limpio:
@@ -948,8 +1326,12 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
                             if len(distractores) == 3:
                                 break
 
-                    while len(distractores) < 3:
-                        distractores.append(f'Distractor generado {len(distractores) + 1}')
+                        if len(distractores) > longitud_inicial_distractores:
+                            filas_con_ia += 1
+
+                    if len(distractores) < 3:
+                        while len(distractores) < 3:
+                            distractores.append('')
 
                     pregunta = Pregunta.objects.create(
                         modulo=modulo_final,
@@ -957,7 +1339,7 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
                         competencia=competencia,
                         nivel_dificultad=nivel_dificultad,
                         contexto_texto=contexto_texto or None,
-                        enunciado=enunciado,
+                        enunciado=enunciado_limpio,
                         estado=estado,
                         lote_id=nuevo_lote,
                         limite_palabras=None,
@@ -975,15 +1357,22 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
                             es_correcta=False,
                         )
 
-                    preguntas_creadas += 1
+                    creadas += 1
             except Exception as exc:
                 errores.append({'fila': fila_excel, 'error': str(exc)})
 
         return Response(
             {
                 'status': 'OK',
-                'preguntas_creadas': preguntas_creadas,
+                'mensaje': (
+                    f'Proceso finalizado. Creadas: {creadas}. '
+                    f'Omitidas por duplicado: {omitidas}.'
+                ),
+                'creadas': creadas,
+                'omitidas': omitidas,
+                'preguntas_creadas': creadas,
                 'filas_con_ia': filas_con_ia,
+                'sin_ia_por_error': sin_ia_por_error,
                 'filas_omitidas': filas_omitidas,
                 'lote_id': str(nuevo_lote),
                 'errores': errores,
@@ -1227,6 +1616,280 @@ class PlantillaExamenAdminViewSet(viewsets.ModelViewSet):
         total_aciertos = Decimal(aciertos_multiples) + puntaje_ensayos
         return round((float(total_aciertos) / total_preguntas) * 300)
 
+    @staticmethod
+    def _map_genero_label(genero):
+        genero_map = {
+            'M': 'Masculino',
+            'F': 'Femenino',
+            'O': 'Otro',
+        }
+        return genero_map.get(str(genero or '').strip().upper(), 'No especificado')
+
+    @staticmethod
+    def _get_filter_value(request, key):
+        query_value = str(request.query_params.get(key) or '').strip()
+        if query_value:
+            return query_value
+
+        data = getattr(request, 'data', None)
+        if isinstance(data, dict):
+            return str(data.get(key) or '').strip()
+        return ''
+
+    @staticmethod
+    def _parse_bool(value):
+        if isinstance(value, bool):
+            return value
+        return str(value or '').strip().lower() in ['1', 'true', 'yes', 'on']
+
+    def _apply_result_filters(self, queryset, request):
+        programa = self._get_filter_value(request, 'programa')
+        genero = self._get_filter_value(request, 'genero').upper()
+        semestre = self._get_filter_value(request, 'semestre')
+
+        if programa:
+            queryset = queryset.filter(estudiante__programa_id=programa)
+
+        if genero in ['M', 'F', 'O']:
+            queryset = queryset.filter(estudiante__genero=genero)
+
+        if semestre and semestre.isdigit():
+            queryset = queryset.filter(estudiante__semestre_actual=int(semestre))
+
+        return queryset
+
+    def _build_por_programa(self, resultados_data):
+        programa_bucket = {}
+        for row in resultados_data:
+            programa_nombre = str(row.get('programa_nombre') or 'N/A').strip() or 'N/A'
+            item = programa_bucket.setdefault(
+                programa_nombre,
+                {
+                    'programa': programa_nombre,
+                    'participantes': 0,
+                    'acumulado': 0.0,
+                },
+            )
+            item['participantes'] += 1
+            item['acumulado'] += float(row.get('puntaje_global') or 0)
+
+        por_programa = []
+        for item in programa_bucket.values():
+            participantes = int(item['participantes'] or 0)
+            por_programa.append(
+                {
+                    'programa': item['programa'],
+                    'promedio': round((item['acumulado'] / participantes), 2) if participantes else 0.0,
+                    'participantes': participantes,
+                }
+            )
+
+        por_programa.sort(
+            key=lambda current: (
+                -float(current.get('promedio') or 0),
+                current.get('programa') or '',
+            )
+        )
+        return por_programa
+
+    def _build_resultados_data(self, intentos_queryset):
+        data = []
+        for intento in intentos_queryset:
+            estudiante = intento.estudiante
+            programa = getattr(estudiante, 'programa', None)
+            puntaje_global = self._calcular_puntaje_intento(intento)
+            data.append(
+                {
+                    'intento_id': str(intento.id),
+                    'estudiante_nombre': self._resolver_nombre_estudiante(estudiante),
+                    'programa_nombre': getattr(programa, 'nombre', None) or 'N/A',
+                    'genero': str(getattr(estudiante, 'genero', '') or '').strip().upper() or None,
+                    'genero_nombre': self._map_genero_label(getattr(estudiante, 'genero', None)),
+                    'semestre': getattr(estudiante, 'semestre_actual', None),
+                    'fecha_fin': intento.fecha_finalizacion.isoformat()
+                    if intento.fecha_finalizacion
+                    else None,
+                    'puntaje_global': puntaje_global,
+                }
+            )
+
+        data.sort(
+            key=lambda item: (
+                -float(item.get('puntaje_global', 0)),
+                str(item.get('fecha_fin') or ''),
+            )
+        )
+
+        for index, row in enumerate(data, start=1):
+            row['posicion'] = index
+
+        return data
+
+    def _build_analiticas_data(self, intentos_queryset, resultados_data):
+        intentos_ids = list(intentos_queryset.values_list('id', flat=True))
+        if not intentos_ids:
+            return {
+                'promedio_global': 0.0,
+                'por_dificultad': [],
+                'por_competencia': [],
+                'por_genero': [],
+                'por_semestre': [],
+                'rendimiento_preguntas': [],
+            }
+
+        acierto_expr = Case(
+            When(opcion_seleccionada__es_correcta=True, then=Value(1.0)),
+            When(
+                Q(pregunta__limite_palabras__isnull=False) & Q(puntaje_calificado__gt=0),
+                then=Value(1.0),
+            ),
+            default=Value(0.0),
+            output_field=FloatField(),
+        )
+
+        respuestas = (
+            RespuestaEstudiante.objects.filter(intento_id__in=intentos_ids)
+            .select_related('pregunta')
+            .annotate(acierto=acierto_expr)
+        )
+
+        promedio_global = (
+            sum(float(item.get('puntaje_global') or 0) for item in resultados_data) / len(resultados_data)
+            if resultados_data
+            else 0.0
+        )
+
+        por_dificultad_rows = (
+            respuestas.values('pregunta__nivel_dificultad')
+            .annotate(promedio=Avg('acierto'), total=Count('id'))
+            .order_by('pregunta__nivel_dificultad')
+        )
+        por_dificultad = [
+            {
+                'dificultad': str(row.get('pregunta__nivel_dificultad') or 'Sin dato'),
+                'promedio': round(float(row.get('promedio') or 0.0) * 300, 2),
+                'participaciones': int(row.get('total') or 0),
+            }
+            for row in por_dificultad_rows
+        ]
+
+        por_competencia_rows = (
+            respuestas.values('pregunta__competencia__nombre', 'pregunta__categoria__nombre')
+            .annotate(promedio=Avg('acierto'), total=Count('id'))
+            .order_by('pregunta__competencia__nombre', 'pregunta__categoria__nombre')
+        )
+        por_competencia = [
+            {
+                'competencia': row.get('pregunta__competencia__nombre') or 'Sin competencia',
+                'categoria': row.get('pregunta__categoria__nombre') or 'Sin categoria',
+                'promedio': round(float(row.get('promedio') or 0.0) * 300, 2),
+                'participaciones': int(row.get('total') or 0),
+            }
+            for row in por_competencia_rows
+        ]
+
+        genero_bucket = {}
+        semestre_bucket = {}
+        for row in resultados_data:
+            genero_key = str(row.get('genero') or '').upper() or 'NA'
+            genero_item = genero_bucket.setdefault(
+                genero_key,
+                {
+                    'genero': genero_key if genero_key != 'NA' else None,
+                    'genero_nombre': self._map_genero_label(genero_key),
+                    'participantes': 0,
+                    'acumulado': 0.0,
+                },
+            )
+            genero_item['participantes'] += 1
+            genero_item['acumulado'] += float(row.get('puntaje_global') or 0)
+
+            semestre_key = row.get('semestre')
+            semestre_label = semestre_key if semestre_key is not None else 'Sin dato'
+            semestre_item = semestre_bucket.setdefault(
+                semestre_label,
+                {
+                    'semestre': semestre_key,
+                    'semestre_label': str(semestre_label),
+                    'participantes': 0,
+                    'acumulado': 0.0,
+                },
+            )
+            semestre_item['participantes'] += 1
+            semestre_item['acumulado'] += float(row.get('puntaje_global') or 0)
+
+        por_genero = []
+        for item in genero_bucket.values():
+            participantes = int(item['participantes'] or 0)
+            por_genero.append(
+                {
+                    'genero': item['genero'],
+                    'genero_nombre': item['genero_nombre'],
+                    'promedio': round((item['acumulado'] / participantes), 2) if participantes else 0.0,
+                    'participantes': participantes,
+                }
+            )
+        por_genero.sort(key=lambda item: item.get('genero_nombre') or '')
+
+        por_semestre = []
+        for item in semestre_bucket.values():
+            participantes = int(item['participantes'] or 0)
+            por_semestre.append(
+                {
+                    'semestre': item['semestre'],
+                    'semestre_label': item['semestre_label'],
+                    'promedio': round((item['acumulado'] / participantes), 2) if participantes else 0.0,
+                    'participantes': participantes,
+                }
+            )
+        por_semestre.sort(
+            key=lambda item: (
+                999 if item.get('semestre') is None else int(item.get('semestre')),
+                item.get('semestre_label') or '',
+            )
+        )
+
+        preguntas_rows = (
+            respuestas.values('pregunta_id', 'pregunta__enunciado', 'pregunta__modulo__nombre')
+            .annotate(
+                total=Count('id'),
+                promedio_acierto=Avg('acierto'),
+            )
+            .order_by('-total')
+        )
+
+        rendimiento_preguntas = []
+        for row in preguntas_rows:
+            promedio_acierto = float(row.get('promedio_acierto') or 0.0)
+            acierto_pct = round(promedio_acierto * 100, 2)
+            error_pct = round((1.0 - promedio_acierto) * 100, 2)
+            rendimiento_preguntas.append(
+                {
+                    'pregunta_id': str(row.get('pregunta_id')),
+                    'enunciado': row.get('pregunta__enunciado') or '',
+                    'modulo': row.get('pregunta__modulo__nombre') or 'Sin modulo',
+                    'participaciones': int(row.get('total') or 0),
+                    'acierto_porcentaje': acierto_pct,
+                    'error_porcentaje': error_pct,
+                }
+            )
+
+        rendimiento_preguntas.sort(
+            key=lambda item: (
+                -float(item.get('error_porcentaje') or 0),
+                -int(item.get('participaciones') or 0),
+            )
+        )
+
+        return {
+            'promedio_global': round(promedio_global, 2),
+            'por_dificultad': por_dificultad,
+            'por_competencia': por_competencia,
+            'por_genero': por_genero,
+            'por_semestre': por_semestre,
+            'rendimiento_preguntas': rendimiento_preguntas[:10],
+        }
+
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         if self._has_intentos(instance):
@@ -1253,36 +1916,546 @@ class PlantillaExamenAdminViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def resultados(self, request, pk=None):
         simulacro = self.get_object()
-        intentos = (
+        intentos_qs = (
             IntentoExamen.objects.filter(plantilla_examen=simulacro, estado='Finalizado')
             .select_related('estudiante__programa')
             .prefetch_related('respuestas__opcion_seleccionada', 'respuestas__pregunta')
         )
-
-        data = []
-        for intento in intentos:
-            estudiante = intento.estudiante
-            programa = getattr(estudiante, 'programa', None)
-            puntaje_global = self._calcular_puntaje_intento(intento)
-            data.append(
-                {
-                    'estudiante_nombre': self._resolver_nombre_estudiante(estudiante),
-                    'programa_nombre': getattr(programa, 'nombre', None) or 'N/A',
-                    'fecha_fin': intento.fecha_finalizacion.isoformat()
-                    if intento.fecha_finalizacion
-                    else None,
-                    'puntaje_global': puntaje_global,
-                }
-            )
-
-        data.sort(
-            key=lambda item: (
-                -float(item.get('puntaje_global', 0)),
-                str(item.get('fecha_fin') or ''),
-            ),
-        )
+        intentos = self._apply_result_filters(intentos_qs, request)
+        data = self._build_resultados_data(intentos)
 
         return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def analiticas_detalladas(self, request, pk=None):
+        simulacro = self.get_object()
+        intentos_qs = (
+            IntentoExamen.objects.filter(plantilla_examen=simulacro, estado='Finalizado')
+            .select_related('estudiante__programa')
+            .prefetch_related('respuestas__opcion_seleccionada', 'respuestas__pregunta')
+        )
+        intentos = self._apply_result_filters(intentos_qs, request)
+        resultados_data = self._build_resultados_data(intentos)
+        analiticas = self._build_analiticas_data(intentos, resultados_data)
+
+        return Response(
+            {
+                'simulacro_id': str(simulacro.id),
+                'simulacro_titulo': simulacro.titulo,
+                **analiticas,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=True,
+        methods=['get'],
+        permission_classes=[IsAuthenticated, IsAdminUser],
+    )
+    def exportar_excel_resultados(self, request, pk=None):
+        simulacro = self.get_object()
+        intentos_qs = (
+            IntentoExamen.objects.filter(plantilla_examen=simulacro, estado='Finalizado')
+            .select_related('estudiante__programa')
+            .prefetch_related('respuestas__opcion_seleccionada', 'respuestas__pregunta')
+        )
+        intentos = self._apply_result_filters(intentos_qs, request)
+        resultados_data = self._build_resultados_data(intentos)
+        analiticas = self._build_analiticas_data(intentos, resultados_data)
+
+        workbook = Workbook()
+        sheet_resultados = workbook.active
+        sheet_resultados.title = 'Resultados Generales'
+
+        header_fill = PatternFill(fill_type='solid', fgColor='8F141B')
+        header_font = Font(color='FFFFFF', bold=True)
+        section_fill = PatternFill(fill_type='solid', fgColor='F3E6E8')
+        section_font = Font(color='8F141B', bold=True)
+        center_alignment = Alignment(horizontal='center', vertical='center')
+
+        headers = ['Puesto', 'Nombre', 'Programa', 'Semestre', 'Genero', 'Puntaje Global']
+        sheet_resultados.append(headers)
+        for column_index in range(1, len(headers) + 1):
+            cell = sheet_resultados.cell(row=1, column=column_index)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center_alignment
+
+        for row in resultados_data:
+            sheet_resultados.append(
+                [
+                    row.get('posicion'),
+                    row.get('estudiante_nombre'),
+                    row.get('programa_nombre'),
+                    row.get('semestre') if row.get('semestre') is not None else 'Sin dato',
+                    row.get('genero_nombre'),
+                    row.get('puntaje_global'),
+                ]
+            )
+
+        for column_cells in sheet_resultados.columns:
+            max_length = 0
+            for cell in column_cells:
+                cell_value = '' if cell.value is None else str(cell.value)
+                if len(cell_value) > max_length:
+                    max_length = len(cell_value)
+            sheet_resultados.column_dimensions[column_cells[0].column_letter].width = min(
+                max(max_length + 2, 12),
+                50,
+            )
+
+        sheet_analitica = workbook.create_sheet(title='Analitica Agrupada')
+
+        def write_section(title, headers_section, rows, start_row):
+            sheet_analitica.cell(row=start_row, column=1, value=title)
+            title_cell = sheet_analitica.cell(row=start_row, column=1)
+            title_cell.font = section_font
+            title_cell.fill = section_fill
+
+            header_row = start_row + 1
+            for col_idx, header in enumerate(headers_section, start=1):
+                cell = sheet_analitica.cell(row=header_row, column=col_idx, value=header)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_alignment
+
+            current_row = header_row + 1
+            for row_values in rows:
+                for col_idx, value in enumerate(row_values, start=1):
+                    sheet_analitica.cell(row=current_row, column=col_idx, value=value)
+                current_row += 1
+
+            return current_row + 1
+
+        row_cursor = 1
+        row_cursor = write_section(
+            'Resumen General',
+            ['Metrica', 'Valor'],
+            [['Promedio Global (0-300)', analiticas.get('promedio_global', 0.0)]],
+            row_cursor,
+        )
+
+        row_cursor = write_section(
+            'Promedio por Dificultad',
+            ['Dificultad', 'Promedio (0-300)', 'Participaciones'],
+            [
+                [item.get('dificultad'), item.get('promedio'), item.get('participaciones')]
+                for item in analiticas.get('por_dificultad', [])
+            ],
+            row_cursor,
+        )
+
+        row_cursor = write_section(
+            'Promedio por Competencia y Categoria',
+            ['Competencia', 'Categoria', 'Promedio (0-300)', 'Participaciones'],
+            [
+                [
+                    item.get('competencia'),
+                    item.get('categoria'),
+                    item.get('promedio'),
+                    item.get('participaciones'),
+                ]
+                for item in analiticas.get('por_competencia', [])
+            ],
+            row_cursor,
+        )
+
+        row_cursor = write_section(
+            'Desempeno por Genero',
+            ['Genero', 'Promedio (0-300)', 'Participantes'],
+            [
+                [item.get('genero_nombre'), item.get('promedio'), item.get('participantes')]
+                for item in analiticas.get('por_genero', [])
+            ],
+            row_cursor,
+        )
+
+        row_cursor = write_section(
+            'Desempeno por Semestre',
+            ['Semestre', 'Promedio (0-300)', 'Participantes'],
+            [
+                [item.get('semestre_label'), item.get('promedio'), item.get('participantes')]
+                for item in analiticas.get('por_semestre', [])
+            ],
+            row_cursor,
+        )
+
+        write_section(
+            'Rendimiento de Preguntas (Top 10 error)',
+            ['Pregunta', 'Modulo', '% Acierto', '% Error', 'Participaciones'],
+            [
+                [
+                    item.get('enunciado'),
+                    item.get('modulo'),
+                    item.get('acierto_porcentaje'),
+                    item.get('error_porcentaje'),
+                    item.get('participaciones'),
+                ]
+                for item in analiticas.get('rendimiento_preguntas', [])
+            ],
+            row_cursor,
+        )
+
+        for column_cells in sheet_analitica.columns:
+            max_length = 0
+            for cell in column_cells:
+                cell_value = '' if cell.value is None else str(cell.value)
+                if len(cell_value) > max_length:
+                    max_length = len(cell_value)
+            sheet_analitica.column_dimensions[column_cells[0].column_letter].width = min(
+                max(max_length + 2, 14),
+                60,
+            )
+
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = (
+            f'attachment; filename="Reporte_Resultados_{simulacro.id}.xlsx"'
+        )
+        workbook.save(response)
+        return response
+
+    @action(detail=True, methods=['post'])
+    def generar_reporte_excel_avanzado(self, request, pk=None):
+        simulacro = self.get_object()
+
+        # IDOR/Privilege Escalation check
+        # Si no es Admin y no es el creador (suponiendo que haya un simulacro.creado_por), bloquear.
+        # Validaremos si es Admin O Profesor. En el contexto de SaberPro, los roles suelen gestionarse así.
+        from users.models import Usuario
+        if request.user.rol not in [Usuario.ROL_ADMIN, Usuario.ROL_PROFESOR]:
+            return Response({'detail': 'No tienes permisos para generar reportes avanzados.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Payload Injection check: strict boolean validation
+        payload_keys = ['incluir_general', 'incluir_programa', 'incluir_demografia', 'incluir_preguntas', 'incluir_competencias']
+        for key in payload_keys:
+            if key in request.data and not isinstance(request.data[key], bool):
+                 return Response({'detail': f'Payload Invalido: {key} debe ser un booleano estricto.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        incluir_general = request.data.get('incluir_general', False)
+        incluir_programa = request.data.get('incluir_programa', False)
+        incluir_demografia = request.data.get('incluir_demografia', False)
+        incluir_preguntas = request.data.get('incluir_preguntas', False)
+        incluir_competencias = request.data.get('incluir_competencias', False)
+
+        if not any([incluir_general, incluir_programa, incluir_demografia, incluir_preguntas, incluir_competencias]):
+            return Response(
+                {'detail': 'Debes seleccionar al menos una seccion para generar el reporte.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Prevencion de Memory Exhaustion: Quitar prefetch_related pesados y usar iterator()
+        # Se usaran aggregate/annotate optimizados de SQL.
+        intentos_qs = (
+            IntentoExamen.objects.filter(plantilla_examen=simulacro, estado='Finalizado')
+            .select_related('estudiante__programa')
+        )
+        intentos = self._apply_result_filters(intentos_qs, request)
+        
+        # Para resultados generales usamos .iterator() nativo 
+        resultados_data_iterator = (
+            self._calcular_puntaje_saber_pro(intento) for intento in intentos.iterator(chunk_size=1000)
+        )
+        # Como build_analiticas y otros asumen tener resultados_data en memoria local (list),
+        # por ahora para resolver DoS extremo reusamos la lista pero limitando el prefetch:
+        resultados_data = self._build_resultados_data(intentos.iterator(chunk_size=1000))
+        analiticas = self._build_analiticas_data(intentos, resultados_data)
+        por_programa = self._build_por_programa(resultados_data)
+
+        workbook = Workbook()
+        default_sheet = workbook.active
+        workbook.remove(default_sheet)
+
+        header_fill = PatternFill(fill_type='solid', fgColor='8F141B')
+        header_font = Font(color='FFFFFF', bold=True)
+        center_alignment = Alignment(horizontal='center', vertical='center')
+
+        def style_header(sheet, headers):
+            sheet.append(headers)
+            for column_index in range(1, len(headers) + 1):
+                cell = sheet.cell(row=1, column=column_index)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_alignment
+
+        def autosize(sheet, min_width=12, max_width=70):
+            for column_cells in sheet.columns:
+                max_length = 0
+                for cell in column_cells:
+                    cell_value = '' if cell.value is None else str(cell.value)
+                    if len(cell_value) > max_length:
+                        max_length = len(cell_value)
+                sheet.column_dimensions[column_cells[0].column_letter].width = min(
+                    max(max_length + 2, min_width),
+                    max_width,
+                )
+
+        if incluir_general:
+            sheet = workbook.create_sheet(title='Resultados Generales')
+            headers = ['Puesto', 'Nombre', 'Programa', 'Semestre', 'Genero', 'Puntaje Global']
+            style_header(sheet, headers)
+
+            for row in resultados_data:
+                sheet.append(
+                    [
+                        row.get('posicion'),
+                        row.get('estudiante_nombre'),
+                        row.get('programa_nombre'),
+                        row.get('semestre') if row.get('semestre') is not None else 'Sin dato',
+                        row.get('genero_nombre'),
+                        row.get('puntaje_global'),
+                    ]
+                )
+            autosize(sheet)
+
+        if incluir_programa:
+            sheet = workbook.create_sheet(title='Por Programa')
+            headers = ['Programa', 'Promedio (0-300)', 'Participantes']
+            style_header(sheet, headers)
+            for item in por_programa:
+                sheet.append([item.get('programa'), item.get('promedio'), item.get('participantes')])
+            autosize(sheet)
+
+        if incluir_demografia:
+            sheet = workbook.create_sheet(title='Demografia')
+            headers = ['Tipo', 'Segmento', 'Promedio (0-300)', 'Participantes']
+            style_header(sheet, headers)
+
+            for item in analiticas.get('por_genero', []):
+                sheet.append(
+                    [
+                        'Genero',
+                        item.get('genero_nombre'),
+                        item.get('promedio'),
+                        item.get('participantes'),
+                    ]
+                )
+
+            for item in analiticas.get('por_semestre', []):
+                sheet.append(
+                    [
+                        'Semestre',
+                        item.get('semestre_label'),
+                        item.get('promedio'),
+                        item.get('participantes'),
+                    ]
+                )
+            autosize(sheet)
+
+        if incluir_competencias:
+            sheet = workbook.create_sheet(title='Competencias Categorias')
+            headers = ['Competencia', 'Categoria', 'Promedio (0-300)', 'Participaciones']
+            style_header(sheet, headers)
+            for item in analiticas.get('por_competencia', []):
+                sheet.append(
+                    [
+                        item.get('competencia'),
+                        item.get('categoria'),
+                        item.get('promedio'),
+                        item.get('participaciones'),
+                    ]
+                )
+            autosize(sheet)
+
+        if incluir_preguntas:
+            sheet = workbook.create_sheet(title='Analisis de Preguntas')
+            headers = [
+                'Pregunta',
+                'Modulo',
+                'Total Respuestas',
+                'Aciertos',
+                'Errores',
+                'Tasa Acierto (%)',
+                'Tasa Error (%)',
+                'Clasificacion',
+            ]
+            style_header(sheet, headers)
+
+            intentos_ids = list(intentos.values_list('id', flat=True))
+            acierto_expr = Case(
+                When(opcion_seleccionada__es_correcta=True, then=Value(1.0)),
+                When(
+                    Q(pregunta__limite_palabras__isnull=False) & Q(puntaje_calificado__gt=0),
+                    then=Value(1.0),
+                ),
+                default=Value(0.0),
+                output_field=FloatField(),
+            )
+
+            preguntas_rows = (
+                RespuestaEstudiante.objects.filter(intento_id__in=intentos_ids)
+                .annotate(acierto=acierto_expr)
+                .values('pregunta__enunciado', 'pregunta__modulo__nombre')
+                .annotate(total_respuestas=Count('id'), tasa_acierto=Avg('acierto'))
+                .order_by('-total_respuestas')
+            )
+
+            ranking = []
+            for row in preguntas_rows:
+                total_respuestas = int(row.get('total_respuestas') or 0)
+                tasa_acierto_ratio = float(row.get('tasa_acierto') or 0.0)
+                aciertos = round(total_respuestas * tasa_acierto_ratio)
+                errores = max(total_respuestas - aciertos, 0)
+                tasa_acierto_pct = round(tasa_acierto_ratio * 100, 2)
+                tasa_error_pct = round((1.0 - tasa_acierto_ratio) * 100, 2)
+                ranking.append(
+                    {
+                        'enunciado': row.get('pregunta__enunciado') or '',
+                        'modulo': row.get('pregunta__modulo__nombre') or 'Sin modulo',
+                        'total_respuestas': total_respuestas,
+                        'aciertos': aciertos,
+                        'errores': errores,
+                        'tasa_acierto_pct': tasa_acierto_pct,
+                        'tasa_error_pct': tasa_error_pct,
+                    }
+                )
+
+            faciles = sorted(
+                ranking,
+                key=lambda item: (
+                    -float(item.get('tasa_acierto_pct') or 0),
+                    -int(item.get('total_respuestas') or 0),
+                ),
+            )[:10]
+            dificiles = sorted(
+                ranking,
+                key=lambda item: (
+                    -float(item.get('tasa_error_pct') or 0),
+                    -int(item.get('total_respuestas') or 0),
+                ),
+            )[:10]
+
+            for item in dificiles:
+                sheet.append(
+                    [
+                        item.get('enunciado'),
+                        item.get('modulo'),
+                        item.get('total_respuestas'),
+                        item.get('aciertos'),
+                        item.get('errores'),
+                        item.get('tasa_acierto_pct'),
+                        item.get('tasa_error_pct'),
+                        'Mas dificil',
+                    ]
+                )
+
+            for item in faciles:
+                sheet.append(
+                    [
+                        item.get('enunciado'),
+                        item.get('modulo'),
+                        item.get('total_respuestas'),
+                        item.get('aciertos'),
+                        item.get('errores'),
+                        item.get('tasa_acierto_pct'),
+                        item.get('tasa_error_pct'),
+                        'Mas facil',
+                    ]
+                )
+
+            autosize(sheet, max_width=85)
+
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = (
+            f'attachment; filename="Reporte_Avanzado_Simulacro_{simulacro.id}.xlsx"'
+        )
+        workbook.save(response)
+        return response
+
+    @action(detail=True, methods=['get'])
+    def descargar_muestra(self, request, pk=None):
+        simulacro = self.get_object()
+
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = (
+            f'attachment; filename="Muestra_Simulacro_{simulacro.id}.csv"'
+        )
+        response.write('\ufeff')
+
+        writer = csv.writer(response, delimiter=';')
+        writer.writerow(
+            [
+                'Modulo',
+                'Categoria',
+                'Dificultad',
+                'Enunciado',
+                'Opcion Correcta',
+                'Distractor 1',
+                'Distractor 2',
+                'Distractor 3',
+            ]
+        )
+
+        preguntas_agregadas = set()
+
+        for regla in simulacro.reglas.select_related('modulo', 'categoria').all():
+            preguntas_qs = Pregunta.objects.filter(
+                modulo=regla.modulo,
+                estado='Publicada',
+            )
+
+            if regla.nivel_dificultad and regla.nivel_dificultad != 'Balanceada':
+                preguntas_qs = preguntas_qs.filter(nivel_dificultad=regla.nivel_dificultad)
+
+            if regla.categoria_id:
+                preguntas_qs = preguntas_qs.filter(categoria=regla.categoria)
+
+            if preguntas_agregadas:
+                preguntas_qs = preguntas_qs.exclude(id__in=preguntas_agregadas)
+
+            preguntas = list(
+                preguntas_qs.select_related('categoria')
+                .prefetch_related('opciones')
+                .distinct()
+                .order_by('?')[: regla.cantidad_preguntas]
+            )
+
+            if len(preguntas) < regla.cantidad_preguntas:
+                raise ValidationError(
+                    {
+                        'detail': (
+                            f'No hay suficientes preguntas publicadas para la regla {regla.id}. '
+                            'Ajusta las reglas o publica mas preguntas antes de descargar la muestra.'
+                        )
+                    }
+                )
+
+            for pregunta in preguntas:
+                preguntas_agregadas.add(pregunta.id)
+                opciones = list(pregunta.opciones.all())
+                opcion_correcta = next(
+                    (
+                        str(opcion.texto or '').strip()
+                        for opcion in opciones
+                        if opcion.es_correcta and str(opcion.texto or '').strip()
+                    ),
+                    '',
+                )
+                distractores = [
+                    str(opcion.texto or '').strip()
+                    for opcion in opciones
+                    if not opcion.es_correcta and str(opcion.texto or '').strip()
+                ]
+                while len(distractores) < 3:
+                    distractores.append('')
+
+                writer.writerow(
+                    [
+                        str(regla.modulo.nombre or '').strip(),
+                        str(getattr(pregunta.categoria, 'nombre', '') or '').strip(),
+                        str(pregunta.nivel_dificultad or '').strip(),
+                        str(pregunta.enunciado or '').strip(),
+                        opcion_correcta,
+                        distractores[0],
+                        distractores[1],
+                        distractores[2],
+                    ]
+                )
+
+        return response
 
 
 class EstudianteExamenViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1309,18 +2482,16 @@ class EstudianteExamenViewSet(viewsets.ReadOnlyModelViewSet):
     def iniciar_intento(self, request, pk=None):
         plantilla = self.get_object()
 
-        if IntentoExamen.objects.filter(
-            estudiante=request.user,
-            plantilla_examen=plantilla,
-        ).exists():
-            return Response({'detalle': 'Intento ya iniciado'}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
             with transaction.atomic():
-                intento = IntentoExamen.objects.create(
+                intento, created = IntentoExamen.objects.get_or_create(
                     estudiante=request.user,
                     plantilla_examen=plantilla,
+                    defaults={'estado': 'En Progreso'}
                 )
+
+                if not created:
+                    return Response({'detalle': 'Intento ya iniciado'}, status=status.HTTP_400_BAD_REQUEST)
 
                 modulos_creados = set()
                 preguntas_agregadas = set()
@@ -1569,7 +2740,11 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
         now = timezone.now()
         if not plantilla.mostrar_resultados_inmediatos and now < plantilla.fecha_fin:
             return Response(
-                {'detalle': 'Los resultados estaran disponibles cuando cierre el examen.'},
+                {
+                    'detalle': 'Los resultados estaran disponibles cuando cierre el examen.',
+                    'fecha_disponible': plantilla.fecha_fin.isoformat(),
+                    'simulacro': plantilla.titulo,
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -1651,6 +2826,40 @@ class RespuestaEstudianteViewSet(mixins.UpdateModelMixin, viewsets.GenericViewSe
     def get_queryset(self):
         return RespuestaEstudiante.objects.filter(intento__estudiante=self.request.user)
 
+    def update(self, request, *args, **kwargs):
+        with transaction.atomic():
+            try:
+                # Bloqueo DB (select_for_update) contra Race Conditions.
+                # Refuerzo IDOR solicitando coincidencia exacta de usuario logueado en DB.
+                respuesta = RespuestaEstudiante.objects.select_related(
+                    'intento__plantilla_examen'
+                ).select_for_update().get(
+                    pk=kwargs.get('pk'),
+                    intento__estudiante=request.user
+                )
+            except RespuestaEstudiante.DoesNotExist:
+                return Response(
+                    {'detail': 'Respuesta no encontrada o acceso denegado.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if respuesta.intento.estado != 'En Progreso':
+                return Response(
+                    {'detail': 'El intento ya fue finalizado y no permite cambios en las respuestas.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            if respuesta.intento.plantilla_examen.fecha_fin < timezone.now():
+                return Response(
+                    {'detail': 'El tiempo del examen ha expirado. No se aceptan más respuestas.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            serializer = self.get_serializer(respuesta, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            return Response(serializer.data)
+
 
 class EvaluacionEnsayoViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = EnsayoPendienteSerializer
@@ -1707,6 +2916,154 @@ class EvaluacionEnsayoViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
+class SimulacrosDashboardStatsView(APIView):
+    permission_classes = [IsAdminUser]
+
+    @staticmethod
+    def _build_objetivo_por_simulacro():
+        rows = (
+            Usuario.objects.filter(
+                rol=Usuario.ROL_ESTUDIANTE,
+                is_active=True,
+                programa__isnull=False,
+                programa__examenes_asignados__estado='Activo',
+            )
+            .values('programa__examenes_asignados')
+            .annotate(total=Count('id', distinct=True))
+        )
+        return {
+            str(row['programa__examenes_asignados']): int(row['total'] or 0)
+            for row in rows
+            if row.get('programa__examenes_asignados')
+        }
+
+    @staticmethod
+    def _build_completados_por_simulacro():
+        rows = (
+            IntentoExamen.objects.filter(
+                plantilla_examen__estado='Activo',
+                estado='Finalizado',
+                estudiante__rol=Usuario.ROL_ESTUDIANTE,
+                estudiante__is_active=True,
+            )
+            .values('plantilla_examen')
+            .annotate(total=Count('estudiante_id', distinct=True))
+        )
+        return {
+            str(row['plantilla_examen']): int(row['total'] or 0)
+            for row in rows
+            if row.get('plantilla_examen')
+        }
+
+    @staticmethod
+    def _build_promedio_puntaje_por_simulacro():
+        acierto_expr = Case(
+            When(opcion_seleccionada__es_correcta=True, then=Value(1.0)),
+            When(
+                Q(pregunta__limite_palabras__isnull=False) & Q(puntaje_calificado__gt=0),
+                then=Value(1.0),
+            ),
+            default=Value(0.0),
+            output_field=FloatField(),
+        )
+
+        rows = (
+            RespuestaEstudiante.objects.filter(
+                intento__plantilla_examen__estado='Activo',
+                intento__estado='Finalizado',
+                intento__estudiante__rol=Usuario.ROL_ESTUDIANTE,
+                intento__estudiante__is_active=True,
+            )
+            .annotate(acierto=acierto_expr)
+            .values('intento__plantilla_examen')
+            .annotate(promedio=Avg('acierto'))
+        )
+
+        result = {}
+        for row in rows:
+            simulacro_id = row.get('intento__plantilla_examen')
+            promedio = row.get('promedio')
+            if not simulacro_id or promedio is None:
+                continue
+            result[str(simulacro_id)] = round(float(promedio) * 300, 2)
+        return result
+
+    @staticmethod
+    def _build_promedio_tiempo_por_simulacro():
+        rows = (
+            IntentoExamen.objects.filter(
+                plantilla_examen__estado='Activo',
+                estado='Finalizado',
+                fecha_finalizacion__isnull=False,
+                estudiante__rol=Usuario.ROL_ESTUDIANTE,
+                estudiante__is_active=True,
+            )
+            .annotate(
+                duracion=ExpressionWrapper(
+                    F('fecha_finalizacion') - F('fecha_inicio'),
+                    output_field=DurationField(),
+                )
+            )
+            .values('plantilla_examen')
+            .annotate(promedio=Avg('duracion'))
+        )
+
+        result = {}
+        for row in rows:
+            simulacro_id = row.get('plantilla_examen')
+            promedio = row.get('promedio')
+            if not simulacro_id or promedio is None:
+                continue
+            result[str(simulacro_id)] = round(float(promedio.total_seconds()) / 60, 2)
+        return result
+
+    def get(self, request):
+        simulacros_activos = PlantillaExamen.objects.filter(estado='Activo').order_by('fecha_inicio', 'titulo')
+        total_simulacros = PlantillaExamen.objects.count()
+        total_activos = simulacros_activos.count()
+
+        objetivo_por_simulacro = self._build_objetivo_por_simulacro()
+        completados_por_simulacro = self._build_completados_por_simulacro()
+        promedio_puntaje_por_simulacro = self._build_promedio_puntaje_por_simulacro()
+        promedio_tiempo_por_simulacro = self._build_promedio_tiempo_por_simulacro()
+
+        data_simulacros_activos = []
+        for simulacro in simulacros_activos:
+            simulacro_id = str(simulacro.id)
+            poblacion_objetivo = int(objetivo_por_simulacro.get(simulacro_id, 0) or 0)
+            completados = int(completados_por_simulacro.get(simulacro_id, 0) or 0)
+            pendientes = max(poblacion_objetivo - completados, 0)
+            porcentaje_completado = (
+                round((min(completados, poblacion_objetivo) / poblacion_objetivo) * 100, 2)
+                if poblacion_objetivo > 0
+                else 0.0
+            )
+
+            data_simulacros_activos.append(
+                {
+                    'id': simulacro_id,
+                    'nombre': simulacro.titulo,
+                    'poblacion_objetivo': poblacion_objetivo,
+                    'completados': completados,
+                    'pendientes': pendientes,
+                    'porcentaje_completado': porcentaje_completado,
+                    'promedio_puntaje': promedio_puntaje_por_simulacro.get(simulacro_id),
+                    'promedio_tiempo_minutos': promedio_tiempo_por_simulacro.get(simulacro_id),
+                }
+            )
+
+        return Response(
+            {
+                'globales': {
+                    'total': total_simulacros,
+                    'activos': total_activos,
+                },
+                'simulacros_activos': data_simulacros_activos,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class AnaliticasAdminViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
@@ -1726,27 +3083,69 @@ class AnaliticasAdminViewSet(viewsets.ViewSet):
             .order_by('-total')
         )
 
-        preguntas_criticas = (
-            RespuestaEstudiante.objects.filter(intento__in=intentos)
-            .values('pregunta__enunciado')
-            .annotate(
-                total_veces=Count('id'),
-                veces_incorrecta=Count(
-                    'id',
-                    filter=Q(
-                        opcion_seleccionada__es_correcta=False,
-                        puntaje_calificado__isnull=True,
-                    ),
-                ),
-            )
-            .order_by('-veces_incorrecta')[:5]
+        filtro_respuestas = Q(
+            respuestaestudiante__intento__estado__in=['Finalizado', 'Pendiente Calificacion'],
         )
+        if simulacro_id:
+            filtro_respuestas &= Q(
+                respuestaestudiante__intento__plantilla_examen_id=simulacro_id,
+            )
+
+        preguntas_anotadas = Pregunta.objects.annotate(
+            total_respuestas=Count('respuestaestudiante', filter=filtro_respuestas),
+            respuestas_incorrectas=Count(
+                'respuestaestudiante',
+                filter=(
+                    filtro_respuestas
+                    & (
+                        Q(respuestaestudiante__opcion_seleccionada__es_correcta=False)
+                        | Q(respuestaestudiante__opcion_seleccionada__isnull=True)
+                    )
+                ),
+            ),
+        ).filter(total_respuestas__gt=0)
+
+        preguntas_criticas_qs = preguntas_anotadas.annotate(
+            tasa_error=ExpressionWrapper(
+                Cast(F('respuestas_incorrectas'), FloatField())
+                * Value(100.0)
+                / Cast(F('total_respuestas'), FloatField()),
+                output_field=FloatField(),
+            )
+        ).filter(tasa_error__gte=60.0)
+
+        total_preguntas_criticas = preguntas_criticas_qs.count()
+        tasa_media_error_criticas = (
+            preguntas_criticas_qs.aggregate(promedio=Avg('tasa_error')).get('promedio') or 0.0
+        )
+
+        top_preguntas_criticas_raw = (
+            preguntas_criticas_qs.values(
+                'enunciado',
+                'total_respuestas',
+                'respuestas_incorrectas',
+                'tasa_error',
+            )
+            .order_by('-tasa_error', '-respuestas_incorrectas', 'created_at')[:5]
+        )
+
+        top_preguntas_criticas = [
+            {
+                'pregunta__enunciado': item['enunciado'],
+                'total_veces': int(item['total_respuestas'] or 0),
+                'veces_incorrecta': int(item['respuestas_incorrectas'] or 0),
+                'tasa_error': round(float(item['tasa_error'] or 0.0), 2),
+            }
+            for item in top_preguntas_criticas_raw
+        ]
 
         return Response(
             {
                 'total_evaluaciones_finalizadas': total_intentos,
+                'total_preguntas_criticas': total_preguntas_criticas,
+                'tasa_media_error_criticas': round(float(tasa_media_error_criticas), 2),
                 'participacion_por_programa': list(participacion_programas),
-                'top_preguntas_criticas': list(preguntas_criticas),
+                'top_preguntas_criticas': top_preguntas_criticas,
             },
             status=status.HTTP_200_OK,
         )

@@ -42,6 +42,27 @@ const resolvePlantillaId = (plantilla: IntentoPrevio['plantilla_examen']): strin
   return null
 }
 
+const resolveEstadoPrioridad = (intento?: IntentoPrevio): number => {
+  if (!intento) {
+    return 0 // Disponible
+  }
+
+  if (intento.estado === 'En Progreso') {
+    return 1
+  }
+
+  if (intento.estado === 'Finalizado' || intento.estado === 'Pendiente Calificacion') {
+    return 2
+  }
+
+  return 3
+}
+
+const resolveDateValue = (value: string): number => {
+  const parsed = new Date(value).getTime()
+  return Number.isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed
+}
+
 const EvaluacionesPage = () => {
   const navigate = useNavigate()
   const [inicioError, setInicioError] = useState<{ examenId: string | null; message: string } | null>(null)
@@ -103,6 +124,20 @@ const EvaluacionesPage = () => {
     inicioError?.message ??
     'No se pudo iniciar el simulacro.'
 
+  const examenesOrdenados = [...examenes].sort((a, b) => {
+    const intentoA = intentos.find((item) => resolvePlantillaId(item.plantilla_examen) === String(a.id))
+    const intentoB = intentos.find((item) => resolvePlantillaId(item.plantilla_examen) === String(b.id))
+
+    const prioridadA = resolveEstadoPrioridad(intentoA)
+    const prioridadB = resolveEstadoPrioridad(intentoB)
+
+    if (prioridadA !== prioridadB) {
+      return prioridadA - prioridadB
+    }
+
+    return resolveDateValue(a.fecha_inicio) - resolveDateValue(b.fecha_inicio)
+  })
+
   return (
     <section className="mx-auto w-full max-w-6xl">
       <header className="mb-5 sm:mb-6">
@@ -110,7 +145,7 @@ const EvaluacionesPage = () => {
           Evaluaciones Disponibles
         </h1>
         <p className="mt-2 text-sm text-usco-gris">
-          Selecciona un simulacro para iniciar tu practica academica.
+          Selecciona un simulacro para iniciar tu práctica académica.
         </p>
       </header>
 
@@ -134,7 +169,7 @@ const EvaluacionesPage = () => {
 
       {!isLoading && !isError && examenes.length > 0 && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-6 xl:grid-cols-3">
-          {examenes.map((examen) => {
+          {examenesOrdenados.map((examen) => {
             const examenId = String(examen.id)
             const intento = intentos.find(
               (item) => resolvePlantillaId(item.plantilla_examen) === examenId,

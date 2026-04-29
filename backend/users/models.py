@@ -95,3 +95,23 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.correo_institucional
+
+
+class Notificacion(models.Model):
+    TIPO_NUEVA = 'NOTIFICACION_NUEVA'
+    TIPO_CHOICES = [
+        (TIPO_NUEVA, 'Notificacion nueva'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='notificaciones')
+    tipo = models.CharField(max_length=40, choices=TIPO_CHOICES, default=TIPO_NUEVA)
+    mensaje = models.CharField(max_length=255)
+    leida = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.usuario.correo_institucional}: {self.mensaje}'

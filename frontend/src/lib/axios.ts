@@ -27,9 +27,11 @@ const axiosInstance = axios.create({
 })
 
 axiosInstance.interceptors.request.use((config) => {
+  const requestUrl = config.url ?? ''
+  const isAuthLoginRequest = requestUrl.includes('/auth/login/') && !requestUrl.includes('/auth/login/refresh/')
   const token = localStorage.getItem('token')
 
-  if (token) {
+  if (token && !isAuthLoginRequest) {
     config.headers = config.headers ?? {}
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -44,7 +46,13 @@ axiosInstance.interceptors.response.use(
     const status = error.response?.status
     const requestUrl = originalRequest?.url ?? ''
 
+    const isLoginRequest =
+      requestUrl.includes('/auth/login/') && !requestUrl.includes('/auth/login/refresh/')
     const isRefreshRequest = requestUrl.includes('/auth/login/refresh/')
+
+    if (status === 401 && isLoginRequest) {
+      return Promise.reject(error)
+    }
 
     if (status === 401 && originalRequest && !originalRequest._retry && !isRefreshRequest) {
       originalRequest._retry = true

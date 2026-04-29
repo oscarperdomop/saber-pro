@@ -1,4 +1,4 @@
-import type { AxiosError } from 'axios'
+﻿import type { AxiosError } from 'axios'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   BookCheck,
@@ -62,7 +62,7 @@ const getSimulacroModules = (simulacro: PlantillaExamen): string[] => {
   if (Array.isArray(simulacro.modulos) && simulacro.modulos.length > 0) {
     return simulacro.modulos.filter(Boolean)
   }
-  return ['Sin detalle de modulos']
+  return ['Sin detalle de módulos']
 }
 
 const getSimulacroDifficulty = (simulacro: PlantillaExamen): string => {
@@ -109,7 +109,7 @@ const DashboardEstudiantePage = () => {
           simulacrosQuery.error?.response?.data?.detalle ??
           intentosQuery.error?.response?.data?.detail ??
           intentosQuery.error?.response?.data?.detalle ??
-          'No fue posible cargar la informacion del dashboard.'}
+          'No fue posible cargar la información del dashboard.'}
       </section>
     )
   }
@@ -155,11 +155,11 @@ const DashboardEstudiantePage = () => {
         <div className="max-w-3xl">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/80">
-              Preparacion Saber Pro
+              Preparación Saber Pro
             </p>
             <h1 className="mt-2 text-3xl font-bold">Hola, {user?.nombres ?? 'Estudiante'}.</h1>
             <p className="mt-2 text-sm text-white/85">
-              Revisa tus simulacros activos, continua tus intentos y consulta tu historial de
+              Revisa tus simulacros activos, continúa tus intentos y consulta tu historial de
               resultados en un solo lugar.
             </p>
           </div>
@@ -204,7 +204,7 @@ const DashboardEstudiantePage = () => {
 
         {simulacrosPendientes.length === 0 ? (
           <article className="rounded-2xl border border-usco-ocre/70 bg-white p-6 text-sm text-usco-gris shadow-sm">
-            <p className="font-semibold text-usco-vino">Al dia, excelente progreso.</p>
+            <p className="font-semibold text-usco-vino">Al día, excelente progreso.</p>
             <p className="mt-1">No tienes simulacros activos pendientes, pero puedes revisar los ya presentados.</p>
           </article>
         ) : (
@@ -256,7 +256,7 @@ const DashboardEstudiantePage = () => {
                     <div className="mt-4 flex min-h-[66px] flex-wrap gap-2">
                       {modulos.slice(0, 3).map((modulo) => (
                         <span
-                          key={modulo}
+                      key={modulo}
                           className="inline-flex items-center rounded-md bg-usco-fondo px-2.5 py-1 text-xs font-medium text-usco-gris"
                         >
                           {modulo}
@@ -351,7 +351,7 @@ const DashboardEstudiantePage = () => {
 
         {intentosFinalizados.length === 0 ? (
           <article className="rounded-2xl border border-usco-ocre/70 bg-white p-6 text-sm text-usco-gris shadow-sm">
-            Aun no tienes intentos finalizados. Completa un simulacro para ver tu historial.
+            Aún no tienes intentos finalizados. Completa un simulacro para ver tu historial.
           </article>
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -400,7 +400,7 @@ const DashboardEstudiantePage = () => {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.18em] text-usco-gris/80">Rendimiento</p>
-            <h3 className="mt-1 text-xl font-bold text-usco-vino">Sigue fortaleciendo tus modulos</h3>
+            <h3 className="mt-1 text-xl font-bold text-usco-vino">Sigue fortaleciendo tus módulos</h3>
             <p className="mt-1 text-sm text-usco-gris">
               Cada intento te acerca a un mejor puntaje en tu examen de Estado.
             </p>
@@ -413,7 +413,7 @@ const DashboardEstudiantePage = () => {
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <article className="rounded-xl border border-usco-ocre/70 bg-usco-fondo/40 p-3">
-            <p className="text-xs uppercase tracking-wide text-usco-gris/80">Ultimo puntaje</p>
+            <p className="text-xs uppercase tracking-wide text-usco-gris/80">Último puntaje</p>
             <p className="mt-1 text-2xl font-bold text-usco-vino">
               {intentosFinalizados[0]?.puntaje_global ?? 0}
             </p>
@@ -433,3 +433,4 @@ const DashboardEstudiantePage = () => {
 }
 
 export default DashboardEstudiantePage
+

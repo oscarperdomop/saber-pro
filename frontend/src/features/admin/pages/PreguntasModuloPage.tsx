@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -19,8 +19,10 @@ import {
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import CargaMasivaPreguntasModal from '../components/CargaMasivaPreguntasModal'
 import CompararPreguntasModal from '../components/CompararPreguntasModal'
-import VisualizarPreguntaModal from '../components/VisualizarPreguntaModal'
-import preguntasService, { type CargaMasivaPreguntasResponse } from '../services/preguntasService'
+import preguntasService, {
+  type BulkUpdateEstadoPreguntasResponse,
+  type CargaMasivaPreguntasResponse,
+} from '../services/preguntasService'
 import ConfirmDialog from '../../../components/ui/ConfirmDialog'
 import RichTextRenderer from '../../../components/ui/RichTextRenderer'
 import type { Modulo, Pregunta } from '../../../types/preguntas'
@@ -31,6 +33,7 @@ interface ApiErrorResponse {
 }
 
 const ULTIMO_LOTE_STORAGE_KEY = 'preguntas_carga_masiva_ultimo_lote'
+const PAGE_SIZE = 10
 
 const safeDecode = (value: string): string => {
   try {
@@ -54,10 +57,10 @@ const getModuloNombre = (pregunta: Pregunta): string => {
   }
 
   if (pregunta.modulo_id) {
-    return `Modulo ${pregunta.modulo_id}`
+    return `Módulo ${pregunta.modulo_id}`
   }
 
-  return `Modulo ${String(pregunta.modulo)}`
+  return `Módulo ${String(pregunta.modulo)}`
 }
 
 const getTipoBadge = (tipo: string) => {
@@ -89,11 +92,11 @@ const getDificultadBadge = (dificultad: string) => {
   return 'bg-red-100 text-red-800'
 }
 
-const normalizeDificultad = (dificultad: string): 'FACIL' | 'MEDIA' | 'ALTA' => {
+const normalizeDificultadLabel = (dificultad?: string): 'Fácil' | 'Media' | 'Alta' => {
   const normalized = (dificultad ?? '').trim().toLowerCase()
-  if (normalized === 'facil' || normalized === 'fácil') return 'FACIL'
-  if (normalized === 'media' || normalized === 'medio') return 'MEDIA'
-  return 'ALTA'
+  if (normalized === 'facil' || normalized === 'fácil') return 'Fácil'
+  if (normalized === 'media' || normalized === 'medio') return 'Media'
+  return 'Alta'
 }
 
 const formatFecha = (value?: string | null) => {
@@ -119,32 +122,61 @@ const PreguntasModuloPage = () => {
   const queryClient = useQueryClient()
   const { moduloNombre } = useParams()
   const moduloActual = safeDecode(moduloNombre ?? 'General')
-  const [mostrarArchivadas, setMostrarArchivadas] = useState(false)
   const [seleccionadas, setSeleccionadas] = useState<string[]>([])
   const [modalCompararOpen, setModalCompararOpen] = useState(false)
   const [isCargaMasivaOpen, setIsCargaMasivaOpen] = useState(false)
   const [ultimoLote, setUltimoLote] = useState<string | null>(null)
   const [lotePendienteRevertir, setLotePendienteRevertir] = useState<string | null>(null)
+  const [preguntaPendienteEliminar, setPreguntaPendienteEliminar] = useState<Pregunta | null>(null)
   const [resumenUltimoLote, setResumenUltimoLote] = useState<{
     preguntasCreadas: number
     filasConIA: number
   } | null>(null)
-  const [preguntaViendo, setPreguntaViendo] = useState<Pregunta | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<'Todas' | 'Publicada' | 'Borrador' | 'Archivada'>(
     'Publicada',
   )
-  const [tipoFiltro, setTipoFiltro] = useState<'Todos' | 'Opcion Multiple' | 'Ensayo'>('Todos')
-  const [ordenFiltro, setOrdenFiltro] = useState<
-    'recientes' | 'antiguas' | 'dificultad' | 'enunciado_az'
-  >('recientes')
+  const [dificultadFiltro, setDificultadFiltro] = useState<'Todas' | 'Fácil' | 'Media' | 'Alta'>(
+    'Todas',
+  )
+  const [ordenFiltro, setOrdenFiltro] = useState<'recientes' | 'antiguas' | 'enunciado_az'>(
+    'recientes',
+  )
+  const [estadoMasivo, setEstadoMasivo] = useState<'Publicada' | 'Borrador' | 'Archivada'>(
+    'Publicada',
+  )
+  const [currentPage, setCurrentPage] = useState(1)
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(
     null,
   )
 
+  const orderingParam = useMemo(() => {
+    if (ordenFiltro === 'antiguas') return 'created_at'
+    if (ordenFiltro === 'enunciado_az') return 'enunciado'
+    return '-created_at'
+  }, [ordenFiltro])
+
+  const incluirArchivadas = useMemo(
+    () => estadoFiltro === 'Archivada' || estadoFiltro === 'Todas',
+    [estadoFiltro],
+  )
+
   const { data, isLoading, isError, error } = useQuery<Pregunta[], AxiosError<ApiErrorResponse>>({
-    queryKey: ['preguntas', mostrarArchivadas],
-    queryFn: () => preguntasService.getPreguntas(mostrarArchivadas),
+    queryKey: [
+      'preguntas',
+      incluirArchivadas,
+      moduloActual,
+      estadoFiltro,
+      dificultadFiltro,
+      orderingParam,
+    ],
+    queryFn: () =>
+      preguntasService.getPreguntas(incluirArchivadas, {
+        moduloNombre: moduloActual,
+        estado: estadoFiltro,
+        dificultad: dificultadFiltro,
+        ordering: orderingParam,
+      }),
   })
   const { data: modulos = [] } = useQuery<Modulo[]>({
     queryKey: ['modulos'],
@@ -191,6 +223,43 @@ const PreguntasModuloPage = () => {
     },
   })
 
+  const bulkEstadoMutation = useMutation<
+    BulkUpdateEstadoPreguntasResponse,
+    AxiosError<ApiErrorResponse>,
+    { ids: string[]; estado: 'Publicada' | 'Borrador' | 'Archivada' }
+  >({
+    mutationFn: ({ ids, estado }) => preguntasService.bulkUpdateEstadoPreguntas({ ids, estado }),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['preguntas'] })
+      setSeleccionadas([])
+      setModalCompararOpen(false)
+      const bloques: string[] = []
+      bloques.push(`${response.actualizados} actualizada(s)`)
+      if (response.sin_cambio > 0) {
+        bloques.push(`${response.sin_cambio} sin cambio`)
+      }
+      if (response.bloqueadas_historial > 0) {
+        bloques.push(`${response.bloqueadas_historial} bloqueada(s) por historial`)
+      }
+      if (response.no_encontrados > 0) {
+        bloques.push(`${response.no_encontrados} no encontrada(s)`)
+      }
+      setNotification({
+        type: 'success',
+        message: `Estado masivo aplicado (${response.estado_aplicado}). ${bloques.join(' · ')}.`,
+      })
+    },
+    onError: (errorBulk) => {
+      setNotification({
+        type: 'info',
+        message:
+          errorBulk.response?.data?.detail ??
+          errorBulk.response?.data?.detalle ??
+          'No fue posible actualizar el estado masivo.',
+      })
+    },
+  })
+
   const revertirCargaMutation = useMutation({
     mutationFn: preguntasService.revertirCargaMasiva,
     onSuccess: (response) => {
@@ -215,6 +284,28 @@ const PreguntasModuloPage = () => {
     },
   })
 
+  const eliminarPreguntaMutation = useMutation({
+    mutationFn: preguntasService.eliminarPregunta,
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['preguntas'] })
+      const tipoEliminacion = response?.tipo_eliminacion
+      const mensajeFallback =
+        tipoEliminacion === 'fisica'
+          ? 'Pregunta eliminada permanentemente.'
+          : 'Pregunta archivada correctamente.'
+      setNotification({
+        type: 'success',
+        message: response?.mensaje ?? mensajeFallback,
+      })
+    },
+    onError: () => {
+      setNotification({
+        type: 'info',
+        message: 'No fue posible eliminar la pregunta en este momento.',
+      })
+    },
+  })
+
   const preguntasModulo = useMemo(
     () =>
       preguntas.filter(
@@ -230,7 +321,10 @@ const PreguntasModuloPage = () => {
       if (estadoFiltro !== 'Todas' && formatEstadoLabel(pregunta.estado) !== estadoFiltro) {
         return false
       }
-      if (tipoFiltro !== 'Todos' && (pregunta.tipo_pregunta ?? '').trim() !== tipoFiltro) {
+      if (
+        dificultadFiltro !== 'Todas' &&
+        normalizeDificultadLabel(pregunta.dificultad) !== dificultadFiltro
+      ) {
         return false
       }
       if (!texto) return true
@@ -243,11 +337,6 @@ const PreguntasModuloPage = () => {
         return String(a.enunciado ?? '').localeCompare(String(b.enunciado ?? ''), 'es')
       }
 
-      if (ordenFiltro === 'dificultad') {
-        const weight = { FACIL: 1, MEDIA: 2, ALTA: 3 }
-        return weight[normalizeDificultad(a.dificultad)] - weight[normalizeDificultad(b.dificultad)]
-      }
-
       const dateA = new Date((a as Pregunta & { created_at?: string }).created_at ?? '').getTime()
       const dateB = new Date((b as Pregunta & { created_at?: string }).created_at ?? '').getTime()
       const safeA = Number.isNaN(dateA) ? 0 : dateA
@@ -257,12 +346,20 @@ const PreguntasModuloPage = () => {
     })
 
     return sorted
-  }, [preguntasModulo, searchTerm, estadoFiltro, tipoFiltro, ordenFiltro])
+  }, [preguntasModulo, searchTerm, estadoFiltro, dificultadFiltro, ordenFiltro])
 
   const preguntasSeleccionadas = useMemo(() => {
     const lookup = new Set(seleccionadas)
     return preguntas.filter((pregunta) => lookup.has(String(pregunta.id)))
   }, [preguntas, seleccionadas])
+
+  const totalFiltradas = preguntasFiltradas.length
+  const totalPages = Math.max(1, Math.ceil(totalFiltradas / PAGE_SIZE))
+
+  const preguntasPaginadas = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return preguntasFiltradas.slice(start, start + PAGE_SIZE)
+  }, [currentPage, preguntasFiltradas])
 
   const moduloPreseleccionado = useMemo(() => {
     if (preguntasModulo.length > 0 && preguntasModulo[0].modulo_id) {
@@ -306,6 +403,16 @@ const PreguntasModuloPage = () => {
     }
   }, [seleccionadas.length])
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [moduloActual, searchTerm, estadoFiltro, dificultadFiltro, ordenFiltro, incluirArchivadas])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
   const toggleSeleccion = (preguntaId: string) => {
     setSeleccionadas((prev) => {
       const yaSeleccionada = prev.includes(preguntaId)
@@ -314,42 +421,37 @@ const PreguntasModuloPage = () => {
         return prev.filter((id) => id !== preguntaId)
       }
 
-      if (prev.length >= 2) {
-        setNotification({
-          type: 'info',
-          message: 'Solo puedes seleccionar 2 preguntas para comparar.',
-        })
-        return prev
-      }
-
       return [...prev, preguntaId]
     })
   }
 
   const todosSeleccionados =
-    preguntasFiltradas.length > 0 &&
-    preguntasFiltradas.every((pregunta) => seleccionadas.includes(String(pregunta.id)))
+    preguntasPaginadas.length > 0 &&
+    preguntasPaginadas.every((pregunta) => seleccionadas.includes(String(pregunta.id)))
 
   const toggleSeleccionTodos = () => {
-    const idsFiltrados = preguntasFiltradas.map((pregunta) => String(pregunta.id))
+    const idsFiltrados = preguntasPaginadas.map((pregunta) => String(pregunta.id))
 
     if (todosSeleccionados) {
       setSeleccionadas((prev) => prev.filter((id) => !idsFiltrados.includes(id)))
       return
     }
 
-    if (idsFiltrados.length > 2) {
-      setNotification({
-        type: 'info',
-        message: 'Solo puedes seleccionar hasta 2 preguntas para comparar.',
-      })
-      return
-    }
-
     setSeleccionadas((prev) => {
       const unique = new Set(prev)
       idsFiltrados.forEach((id) => unique.add(id))
-      return Array.from(unique).slice(0, 2)
+      return Array.from(unique)
+    })
+  }
+
+  const aplicarEstadoMasivo = () => {
+    if (seleccionadas.length === 0 || bulkEstadoMutation.isPending) {
+      return
+    }
+
+    bulkEstadoMutation.mutate({
+      ids: seleccionadas,
+      estado: estadoMasivo,
     })
   }
 
@@ -397,10 +499,33 @@ const PreguntasModuloPage = () => {
     revertirCargaMutation.mutate(loteId)
   }
 
+  const confirmarEliminarPregunta = () => {
+    if (!preguntaPendienteEliminar) {
+      return
+    }
+
+    const preguntaId = preguntaPendienteEliminar.id
+    setPreguntaPendienteEliminar(null)
+    eliminarPreguntaMutation.mutate(preguntaId)
+  }
+
+  const abrirCarruselPregunta = (startIndex: number) => {
+    if (!preguntasFiltradas.length) {
+      return
+    }
+
+    navigate('/preguntas/carousel', {
+      state: {
+        preguntasList: preguntasFiltradas,
+        startIndex,
+      },
+    })
+  }
+
   if (isLoading) {
     return (
       <section className="rounded-xl border border-usco-ocre/80 bg-white p-6 text-usco-gris shadow-sm">
-        Cargando preguntas del modulo...
+        Cargando preguntas del módulo...
       </section>
     )
   }
@@ -410,28 +535,28 @@ const PreguntasModuloPage = () => {
       <section className="rounded-xl border border-red-300 bg-red-50 p-6 text-sm text-red-700">
         {error.response?.data?.detail ??
           error.response?.data?.detalle ??
-          'No fue posible cargar las preguntas del modulo.'}
+          'No fue posible cargar las preguntas del módulo.'}
       </section>
     )
   }
 
   return (
-    <section className="mx-auto w-full max-w-7xl space-y-5">
+    <section className="bank-scope mx-auto w-full max-w-7xl space-y-5">
       <header className="flex flex-col gap-3">
         <button
           type="button"
           onClick={() => navigate('/preguntas')}
-          className="inline-flex w-fit items-center gap-2 rounded-xl border border-usco-gris/30 px-3 py-2 text-sm font-semibold text-usco-gris transition hover:border-usco-vino hover:text-usco-vino"
+          className="inline-flex w-fit items-center gap-2 rounded-xl border border-usco-ocre/80 bg-white px-4 py-2.5 text-sm font-semibold text-usco-gris shadow-sm transition hover:border-usco-vino hover:text-usco-vino"
         >
           <ArrowLeft className="h-4 w-4" />
-          Volver a Modulos
+          Volver a Módulos
         </button>
 
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-usco-vino">Preguntas de: {moduloActual}</h1>
             <p className="mt-1 text-sm text-usco-gris/85">
-              {preguntasModulo.length} preguntas · Selecciona 2 para comparar versiones
+              {preguntasModulo.length} preguntas · Selecciona en lote o marca 2 para comparar
             </p>
           </div>
 
@@ -439,7 +564,7 @@ const PreguntasModuloPage = () => {
             <button
               type="button"
               onClick={() => setIsCargaMasivaOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-usco-gris/30 bg-white px-4 py-2.5 text-sm font-semibold text-usco-gris shadow-sm transition hover:border-usco-vino hover:text-usco-vino"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-usco-ocre/90 bg-usco-ocre px-4 py-2.5 text-sm font-bold text-usco-vino shadow-sm transition hover:bg-yellow-200"
             >
               <Upload className="h-4 w-4" />
               Carga Masiva
@@ -491,9 +616,61 @@ const PreguntasModuloPage = () => {
         </section>
       )}
 
+      {seleccionadas.length > 0 && (
+        <section className="sticky top-2 z-20 rounded-2xl border border-usco-vino/30 bg-white/95 p-3 shadow-lg backdrop-blur sm:p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p className="text-sm font-semibold text-usco-gris">
+              {seleccionadas.length} pregunta(s) seleccionada(s)
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {seleccionadas.length === 2 && (
+                <button
+                  type="button"
+                  onClick={() => setModalCompararOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#3f6fb6] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#315896]"
+                >
+                  <GitMerge className="h-4 w-4" />
+                  Comparar
+                </button>
+              )}
+
+              <select
+                value={estadoMasivo}
+                onChange={(event) =>
+                  setEstadoMasivo(event.target.value as 'Publicada' | 'Borrador' | 'Archivada')
+                }
+                className="rounded-xl border border-usco-ocre/80 bg-white px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
+              >
+                <option value="Publicada">Publicada</option>
+                <option value="Borrador">Borrador</option>
+                <option value="Archivada">Archivada</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={aplicarEstadoMasivo}
+                disabled={bulkEstadoMutation.isPending}
+                className="rounded-xl bg-usco-vino px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#741017] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {bulkEstadoMutation.isPending ? 'Aplicando...' : 'Cambiar estado masivo'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSeleccionadas([])}
+                className="rounded-xl border border-usco-gris/30 px-3 py-2 text-sm font-semibold text-usco-gris transition hover:border-usco-vino hover:text-usco-vino"
+              >
+                Limpiar selección
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="rounded-2xl border border-usco-ocre/70 bg-white p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
-          <label className="relative xl:col-span-4">
+          <label className="relative xl:col-span-6">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
             <input
               type="text"
@@ -523,13 +700,16 @@ const PreguntasModuloPage = () => {
           <label className="relative xl:col-span-2">
             <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
             <select
-              value={tipoFiltro}
-              onChange={(event) => setTipoFiltro(event.target.value as 'Todos' | 'Opcion Multiple' | 'Ensayo')}
+              value={dificultadFiltro}
+              onChange={(event) =>
+                setDificultadFiltro(event.target.value as 'Todas' | 'Fácil' | 'Media' | 'Alta')
+              }
               className="w-full rounded-xl border border-usco-ocre/80 bg-white py-2.5 pl-9 pr-3 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
             >
-              <option value="Todos">Todos</option>
-              <option value="Opcion Multiple">Opcion Multiple</option>
-              <option value="Ensayo">Ensayo</option>
+              <option value="Todas">Todas las dificultades</option>
+              <option value="Fácil">Fácil</option>
+              <option value="Media">Media</option>
+              <option value="Alta">Alta</option>
             </select>
           </label>
 
@@ -538,43 +718,18 @@ const PreguntasModuloPage = () => {
             <select
               value={ordenFiltro}
               onChange={(event) =>
-                setOrdenFiltro(
-                  event.target.value as 'recientes' | 'antiguas' | 'dificultad' | 'enunciado_az',
-                )
+                setOrdenFiltro(event.target.value as 'recientes' | 'antiguas' | 'enunciado_az')
               }
               className="w-full rounded-xl border border-usco-ocre/80 bg-white py-2.5 pl-9 pr-3 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
             >
               <option value="recientes">Recientes</option>
               <option value="antiguas">Antiguas</option>
-              <option value="dificultad">Por dificultad</option>
               <option value="enunciado_az">Enunciado A-Z</option>
             </select>
           </label>
 
-          <label className="inline-flex cursor-pointer items-center gap-2 px-1 py-2.5 text-sm font-medium text-usco-gris xl:col-span-2 xl:justify-end">
-            <input
-              type="checkbox"
-              checked={mostrarArchivadas}
-              onChange={(event) => setMostrarArchivadas(event.target.checked)}
-              className="h-5 w-5 shrink-0 rounded-md border-2 border-red-400 text-usco-vino focus:ring-usco-vino"
-            />
-            <span className="whitespace-nowrap leading-none">Mostrar archivadas</span>
-          </label>
         </div>
       </section>
-
-      {seleccionadas.length === 2 && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setModalCompararOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#3f6fb6] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#315896]"
-          >
-            <GitMerge className="h-4 w-4" />
-            Comparar Seleccionadas
-          </button>
-        </div>
-      )}
 
       <div className="overflow-x-auto rounded-2xl border border-usco-ocre/80 bg-white shadow-md sm:rounded-lg">
         <table className="w-full min-w-[1060px]">
@@ -622,17 +777,14 @@ const PreguntasModuloPage = () => {
               </tr>
             )}
 
-            {preguntasFiltradas.map((pregunta) => (
+            {preguntasPaginadas.map((pregunta, rowIndex) => (
               <tr key={String(pregunta.id)} className="bg-white transition hover:bg-usco-fondo/60">
                 <td className="px-3 py-3 text-center">
                   <input
                     type="checkbox"
                     checked={seleccionadas.includes(String(pregunta.id))}
                     onChange={() => toggleSeleccion(String(pregunta.id))}
-                    disabled={
-                      seleccionadas.length >= 2 && !seleccionadas.includes(String(pregunta.id))
-                    }
-                    className="h-4 w-4 rounded border-gray-300 text-usco-vino focus:ring-usco-vino disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-4 w-4 rounded border-gray-300 text-usco-vino focus:ring-usco-vino"
                     aria-label={`Seleccionar pregunta ${pregunta.id}`}
                   />
                 </td>
@@ -682,27 +834,17 @@ const PreguntasModuloPage = () => {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-center gap-3 text-usco-gris">
-                    {pregunta.estado === 'Archivada' ? (
-                      <button
-                        type="button"
-                        onClick={() => setPreguntaViendo(pregunta)}
-                        className="rounded-md p-1.5 text-gray-500 transition hover:bg-usco-fondo hover:text-usco-vino"
-                        title="Ver pregunta archivada"
-                        aria-label="Ver pregunta archivada"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                    ) : (
+                    <button
+                      type="button"
+                      onClick={() => abrirCarruselPregunta((currentPage - 1) * PAGE_SIZE + rowIndex)}
+                      className="rounded-md p-1.5 text-gray-500 transition hover:bg-usco-fondo hover:text-usco-vino"
+                      title="Ver pregunta"
+                      aria-label="Ver pregunta"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    {pregunta.estado !== 'Archivada' && (
                       <>
-                        <button
-                          type="button"
-                          onClick={() => setPreguntaViendo(pregunta)}
-                          className="rounded-md p-1.5 transition hover:bg-usco-fondo hover:text-blue-600"
-                          title="Ver pregunta"
-                          aria-label="Ver pregunta"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
                         <button
                           type="button"
                           onClick={() => navigate(`/preguntas/${pregunta.id}/editar`)}
@@ -739,6 +881,8 @@ const PreguntasModuloPage = () => {
                         </button>
                         <button
                           type="button"
+                          onClick={() => setPreguntaPendienteEliminar(pregunta)}
+                          disabled={eliminarPreguntaMutation.isPending}
                           className="rounded-md p-1.5 transition hover:bg-usco-fondo hover:text-red-600"
                           aria-label="Eliminar pregunta"
                         >
@@ -754,17 +898,51 @@ const PreguntasModuloPage = () => {
         </table>
       </div>
 
+      <div className="flex flex-col gap-3 rounded-2xl border border-usco-ocre/80 bg-white px-4 py-3 text-sm text-usco-gris shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <p>
+          Mostrando {preguntasPaginadas.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1} -{' '}
+          {(currentPage - 1) * PAGE_SIZE + preguntasPaginadas.length} de {totalFiltradas} preguntas.
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            disabled={currentPage === 1}
+            className="rounded-lg border border-usco-gris/30 px-3 py-1.5 font-medium text-usco-gris transition hover:border-usco-vino hover:text-usco-vino disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Anterior
+          </button>
+            <span className="px-2 font-semibold text-usco-vino">
+              Página {currentPage} de {totalPages}
+            </span>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+            disabled={currentPage >= totalPages}
+            className="rounded-lg border border-usco-gris/30 px-3 py-1.5 font-medium text-usco-gris transition hover:border-usco-vino hover:text-usco-vino disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Siguiente
+          </button>
+        </div>
+      </div>
+
       {cambiarEstadoMutation.isError && (
         <section className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
           No fue posible actualizar el estado de la pregunta.
         </section>
       )}
 
-      <VisualizarPreguntaModal
-        isOpen={Boolean(preguntaViendo)}
-        onClose={() => setPreguntaViendo(null)}
-        pregunta={preguntaViendo}
-      />
+      {eliminarPreguntaMutation.isError && (
+        <section className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+          No fue posible eliminar la pregunta.
+        </section>
+      )}
+
+      {bulkEstadoMutation.isError && (
+        <section className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+          No fue posible ejecutar la actualización masiva de estado.
+        </section>
+      )}
 
       <CompararPreguntasModal
         isOpen={modalCompararOpen && preguntasSeleccionadas.length === 2}
@@ -791,9 +969,22 @@ const PreguntasModuloPage = () => {
         onConfirm={confirmarReversionLote}
         onCancel={() => setLotePendienteRevertir(null)}
       />
+
+      <ConfirmDialog
+        open={Boolean(preguntaPendienteEliminar)}
+        title="Eliminar pregunta"
+        message="Si la pregunta ya fue utilizada, se archivara para conservar trazabilidad. Si no ha sido utilizada, se eliminara permanentemente de la base de datos."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        isLoading={eliminarPreguntaMutation.isPending}
+        onConfirm={confirmarEliminarPregunta}
+        onCancel={() => setPreguntaPendienteEliminar(null)}
+      />
     </section>
   )
 }
 
 export default PreguntasModuloPage
+
+
 

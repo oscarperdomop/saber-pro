@@ -1,3 +1,44 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html.dark {
+    color-scheme: dark;
+  }
+}
+
+@layer components {
+  .dark .bank-scope {
+    color: #e2e8f0;
+  }
+
+  .dark .bank-scope [class*='bg-white'] {
+    background-color: rgb(15 23 42 / 1) !important;
+  }
+
+  .dark .bank-scope [class*='bg-usco-fondo'] {
+    background-color: rgb(30 41 59 / 1) !important;
+  }
+
+  .dark .bank-scope [class*='text-usco-gris'] {
+    color: rgb(203 213 225 / 1) !important;
+  }
+
+  .dark .bank-scope [class*='border-usco-ocre'] {
+    border-color: rgb(71 85 105 / 0.85) !important;
+  }
+
+  .dark .bank-scope input,
+  .dark .bank-scope select,
+  .dark .bank-scope textarea {
+    background-color: rgb(15 23 42 / 1) !important;
+    color: rgb(226 232 240 / 1) !important;
+    border-color: rgb(71 85 105 / 0.85) !important;
+  }
+
+  .dark .bank-scope [class*='hover:bg-usco-fondo']:hover,
+  .dark .bank-scope [class*='hover:bg-red-50']:hover {
+    background-color: rgb(51 65 85 / 1) !important;
+  }
+}

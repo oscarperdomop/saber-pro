@@ -8,6 +8,7 @@ import {
   Lock,
   LogOut,
   Settings2,
+  Trophy,
   UserCircle2,
   Users,
 } from 'lucide-react'
@@ -82,6 +83,13 @@ const navItems: NavItem[] = [
     hideForStaffProfessor: true,
   },
   {
+    to: '/resultados',
+    label: 'Resultados',
+    icon: Trophy,
+    roles: ['ESTUDIANTE', 'PROFESOR'],
+    hideForStaffProfessor: true,
+  },
+  {
     to: '/perfil',
     label: 'Mi Perfil',
     icon: UserCircle2,
@@ -122,7 +130,7 @@ const Sidebar = ({ isSidebarOpen, isSidebarCollapsed, onCloseMobileSidebar }: Si
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-usco-ocre/70 bg-white shadow-xl transition-all duration-300 md:sticky md:top-0 md:z-10 md:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] min-h-[100svh] max-h-[100dvh] flex-col overflow-hidden border-r border-usco-ocre/70 bg-white shadow-xl transition-all duration-300 overscroll-none md:sticky md:top-0 md:z-10 md:h-screen md:max-h-screen md:shadow-none ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         } ${isSidebarCollapsed ? 'w-20' : 'w-72 md:w-64'}`}
       >
@@ -152,7 +160,7 @@ const Sidebar = ({ isSidebarOpen, isSidebarCollapsed, onCloseMobileSidebar }: Si
           </Link>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+        <nav className="flex-1 space-y-1 overflow-y-auto overscroll-contain p-3">
           {visibleNavItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
@@ -182,17 +190,17 @@ const Sidebar = ({ isSidebarOpen, isSidebarCollapsed, onCloseMobileSidebar }: Si
           ))}
         </nav>
 
-        <div className="border-t border-usco-ocre/70 p-3">
+        <div className="border-t border-usco-ocre/70 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
           <button
             type="button"
             onClick={logout}
             className={`flex w-full items-center rounded-xl px-3 py-3 text-sm font-semibold text-usco-gris transition hover:bg-red-50 hover:text-usco-vino ${
               isSidebarCollapsed ? 'justify-center px-0' : 'gap-3'
             }`}
-            title={isSidebarCollapsed ? 'Cerrar Sesion' : undefined}
+                title={isSidebarCollapsed ? 'Cerrar Sesión' : undefined}
           >
             <LogOut className="h-5 w-5 shrink-0" />
-            {!isSidebarCollapsed && <span>Cerrar Sesion</span>}
+            {!isSidebarCollapsed && <span>Cerrar Sesión</span>}
           </button>
 
           {!isSidebarCollapsed && (

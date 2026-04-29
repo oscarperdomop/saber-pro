@@ -121,8 +121,96 @@ export interface ResumenResultados {
 }
 
 export interface ResultadoSimulacro {
+  intento_id?: string
+  posicion?: number
   estudiante_nombre: string
   programa_nombre: string
+  genero?: string | null
+  genero_nombre?: string
+  semestre?: number | null
   fecha_fin: string | null
   puntaje_global: number
+}
+
+export interface AnaliticaDificultad {
+  dificultad: string
+  promedio: number
+  participaciones: number
+}
+
+export interface AnaliticaCompetencia {
+  competencia: string
+  categoria: string
+  promedio: number
+  participaciones: number
+}
+
+export interface AnaliticaGenero {
+  genero: string | null
+  genero_nombre: string
+  promedio: number
+  participantes: number
+}
+
+export interface AnaliticaSemestre {
+  semestre: number | null
+  semestre_label: string
+  promedio: number
+  participantes: number
+}
+
+export interface RendimientoPreguntaSimulacro {
+  pregunta_id: string
+  enunciado: string
+  modulo: string
+  participaciones: number
+  acierto_porcentaje: number
+  error_porcentaje: number
+}
+
+export interface AnaliticasDetalladasSimulacro {
+  simulacro_id: string
+  simulacro_titulo: string
+  promedio_global: number
+  por_dificultad: AnaliticaDificultad[]
+  por_competencia: AnaliticaCompetencia[]
+  por_genero: AnaliticaGenero[]
+  por_semestre: AnaliticaSemestre[]
+  rendimiento_preguntas: RendimientoPreguntaSimulacro[]
+}
+
+export interface FiltrosResultadosSimulacro {
+  programa?: string | number
+  genero?: string
+  semestre?: string | number
+}
+
+export interface ConfigReporteAvanzadoSimulacro {
+  incluir_general: boolean
+  incluir_programa: boolean
+  incluir_demografia: boolean
+  incluir_preguntas: boolean
+  incluir_competencias: boolean
+  programa?: string | number
+  genero?: string
+  semestre?: string | number
+}
+
+export interface SimulacroParticipacionActivo {
+  id: string
+  nombre: string
+  poblacion_objetivo: number
+  completados: number
+  pendientes: number
+  porcentaje_completado: number
+  promedio_puntaje?: number | null
+  promedio_tiempo_minutos?: number | null
+}
+
+export interface SimulacrosDashboardStats {
+  globales: {
+    total: number
+    activos: number
+  }
+  simulacros_activos: SimulacroParticipacionActivo[]
 }

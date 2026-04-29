@@ -9,6 +9,7 @@ import EditarPreguntaPage from '../features/admin/pages/EditarPreguntaPage'
 import EditarSimulacroPage from '../features/admin/pages/EditarSimulacroPage'
 import EspecificacionesModuloPage from '../features/admin/pages/EspecificacionesModuloPage'
 import PreguntasModuloPage from '../features/admin/pages/PreguntasModuloPage'
+import PreguntaCarouselView from '../features/admin/pages/PreguntaCarouselView'
 import ResultadosSimulacroPage from '../features/admin/pages/ResultadosSimulacroPage'
 import SimulacrosPage from '../features/admin/pages/SimulacrosPage'
 import UsuariosPage from '../features/admin/pages/UsuariosPage'
@@ -20,6 +21,7 @@ import EvaluacionesPage from '../features/estudiante/pages/EvaluacionesPage'
 import ModulosIntentoPage from '../features/estudiante/pages/ModulosIntentoPage'
 import PresentarExamenPage from '../features/estudiante/pages/PresentarExamenPage'
 import ResultadosExamenPage from '../features/estudiante/pages/ResultadosExamenPage'
+import ResultadosPage from '../features/estudiante/pages/ResultadosPage'
 
 const AppRouter = () => {
   return (
@@ -52,6 +54,7 @@ const AppRouter = () => {
               <Route path="/preguntas" element={<BancoPreguntasPage />} />
               <Route path="/preguntas/nueva" element={<CrearPreguntaPage />} />
               <Route path="/preguntas/:preguntaId/editar" element={<EditarPreguntaPage />} />
+              <Route path="/preguntas/carousel" element={<PreguntaCarouselView />} />
               <Route path="/preguntas/modulo/:moduloNombre" element={<PreguntasModuloPage />} />
               <Route path="/modulos/especificaciones" element={<EspecificacionesModuloPage />} />
               <Route path="/simulacros" element={<SimulacrosPage />} />
@@ -74,6 +77,7 @@ const AppRouter = () => {
             >
               <Route path="/estudiante/dashboard" element={<DashboardPage />} />
               <Route path="/evaluaciones" element={<EvaluacionesPage />} />
+              <Route path="/resultados" element={<ResultadosPage />} />
               <Route path="/evaluaciones/intento/:intentoId" element={<ModulosIntentoPage />} />
               <Route
                 path="/evaluaciones/intento/:intentoId/resultados"
