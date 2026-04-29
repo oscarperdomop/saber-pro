@@ -13,7 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     curl \
+    poppler-utils \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+RUN curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh && \
+    install -m 0755 tectonic /usr/local/bin/tectonic && \
+    rm -f tectonic
 
 # Copiar requirements primero para aprovechar cache de Docker layers
 COPY requirements.txt /app/requirements.txt
