@@ -1,6 +1,6 @@
 import { type FormEvent, useMemo, useState } from 'react'
 import type { AxiosError } from 'axios'
-import { CheckCircle2, KeyRound, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, KeyRound, ShieldCheck } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { resolveDefaultRoute, resolveUserRole } from '../../../hooks/useAuthStore'
@@ -59,6 +59,8 @@ const extractErrorMessage = (
 const ActivarCuentaPage = () => {
   const [passwordActual, setPasswordActual] = useState('')
   const [passwordNueva, setPasswordNueva] = useState('')
+  const [mostrarActual, setMostrarActual] = useState(false)
+  const [mostrarNueva, setMostrarNueva] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const navigate = useNavigate()
 
@@ -124,13 +126,21 @@ const ActivarCuentaPage = () => {
               <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
               <input
                 id="password_actual"
-                type="password"
+                type={mostrarActual ? 'text' : 'password'}
                 required
                 value={passwordActual}
                 onChange={(event) => setPasswordActual(event.target.value)}
-                className="w-full rounded-xl border border-usco-ocre/70 py-3 pl-10 pr-4 text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
+                className="w-full rounded-xl border border-usco-ocre/70 py-3 pl-10 pr-11 text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
                 placeholder="Ingresa tu contraseÃ±a actual"
               />
+              <button
+                type="button"
+                onClick={() => setMostrarActual((previous) => !previous)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-usco-gris/80 transition hover:text-usco-vino"
+                aria-label={mostrarActual ? 'Ocultar contraseña actual' : 'Mostrar contraseña actual'}
+              >
+                {mostrarActual ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
           </div>
 
@@ -142,13 +152,21 @@ const ActivarCuentaPage = () => {
               <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
               <input
                 id="password_nueva"
-                type="password"
+                type={mostrarNueva ? 'text' : 'password'}
                 required
                 value={passwordNueva}
                 onChange={(event) => setPasswordNueva(event.target.value)}
-                className="w-full rounded-xl border border-usco-ocre/70 py-3 pl-10 pr-4 text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
+                className="w-full rounded-xl border border-usco-ocre/70 py-3 pl-10 pr-11 text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
                 placeholder="Define una nueva contraseÃ±a segura"
               />
+              <button
+                type="button"
+                onClick={() => setMostrarNueva((previous) => !previous)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-usco-gris/80 transition hover:text-usco-vino"
+                aria-label={mostrarNueva ? 'Ocultar nueva contraseña' : 'Mostrar nueva contraseña'}
+              >
+                {mostrarNueva ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
           </div>
 
