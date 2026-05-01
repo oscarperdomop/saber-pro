@@ -1,5 +1,5 @@
-ï»¿# Imagen base ligera y estable para producciÃ³n
-FROM python:3.10-slim
+# Imagen base ligera y estable para producción
+FROM python:3.13-slim
 
 # Evita .pyc y fuerza logs en stdout/stderr
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -28,7 +28,7 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r /app/requirements.txt
 
-# Copiar el cÃ³digo del backend
+# Copiar el código del backend
 COPY . /app
 
 # Exponer puerto Daphne
