@@ -186,8 +186,8 @@ class LaTeXPreviewView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        timeout_seconds = int(getattr(settings, 'LATEX_PREVIEW_TIMEOUT_SECONDS', 5) or 5)
-        timeout_seconds = max(3, min(timeout_seconds, 5))
+        timeout_seconds = int(getattr(settings, 'LATEX_PREVIEW_TIMEOUT_SECONDS', 45) or 45)
+        timeout_seconds = max(5, min(timeout_seconds, 180))
         pdf_base64, png_base64, compile_error = compilar_preview_latex_base64(
             texto_latex,
             timeout_seconds=timeout_seconds,

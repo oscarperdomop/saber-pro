@@ -376,6 +376,9 @@ def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
             "'pip install pdf2image' y configura poppler en el servidor."
         )
 
+    timeout_seconds = int(getattr(settings, 'LATEX_COMPILE_TIMEOUT_SECONDS', 30) or 30)
+    timeout_seconds = max(5, min(timeout_seconds, 180))
+
     with TemporaryDirectory() as temp_dir:
         tex_path = os.path.join(temp_dir, 'input.tex')
         with open(tex_path, 'w', encoding='utf-8') as tex_file:
@@ -408,10 +411,13 @@ def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
                 text=True,
                 encoding='utf-8',
                 errors='ignore',
-                timeout=5,
+                timeout=timeout_seconds,
             )
         except subprocess.TimeoutExpired:
-            return None, 'Error de compilacion LaTeX: Timeout excedido (5s). Posible bucle infinito detectado (Fall Guard).'
+            return None, (
+                f'Error de compilacion LaTeX: Timeout excedido ({timeout_seconds}s). '
+                'Si es el primer render con Tectonic, puede estar descargando paquetes.'
+            )
         except FileNotFoundError:
             return None, (
                 f"No se encontro el compilador '{compiler}' en el servidor. "
@@ -510,7 +516,9 @@ def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
         r"\end{document}" "\n"
     )
 
-    timeout_seconds = max(3, min(int(timeout_seconds or 5), 5))
+    configured_timeout = int(getattr(settings, 'LATEX_PREVIEW_TIMEOUT_SECONDS', 45) or 45)
+    timeout_seconds = int(timeout_seconds or configured_timeout)
+    timeout_seconds = max(5, min(timeout_seconds, 180))
 
     with TemporaryDirectory() as temp_dir:
         tex_path = os.path.join(temp_dir, 'input.tex')
