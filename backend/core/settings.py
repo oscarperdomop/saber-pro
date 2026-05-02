@@ -225,6 +225,29 @@ CSRF_TRUSTED_ORIGINS = [
 LATEX_COMPILER = os.getenv('LATEX_COMPILER', 'pdflatex').strip() or 'pdflatex'
 LATEX_POPPLER_PATH = os.getenv('LATEX_POPPLER_PATH', '').strip()
 
+
+def _env_int(name: str, default: int, min_value: int, max_value: int) -> int:
+    raw = str(os.getenv(name, str(default)) or str(default)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = default
+    return max(min_value, min(value, max_value))
+
+
+LATEX_COMPILE_TIMEOUT_SECONDS = _env_int(
+    'LATEX_COMPILE_TIMEOUT_SECONDS',
+    default=30,
+    min_value=5,
+    max_value=180,
+)
+LATEX_PREVIEW_TIMEOUT_SECONDS = _env_int(
+    'LATEX_PREVIEW_TIMEOUT_SECONDS',
+    default=45,
+    min_value=5,
+    max_value=180,
+)
+
 LATEX_PREAMBLE_INSTITUCIONAL = r"""
 \documentclass[preview,border=2pt]{standalone}
 \usepackage[utf8]{inputenc}
