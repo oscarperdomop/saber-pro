@@ -261,6 +261,7 @@ LATEX_PREAMBLE_INSTITUCIONAL = r"""
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{tikz}
+\usetikzlibrary{arrows.meta}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usepackage{tcolorbox}
