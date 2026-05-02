@@ -267,6 +267,17 @@ def _get_latex_wrapper():
     return wrapper or LATEX_DOCUMENT_WRAPPER_DEFAULT
 
 
+def _normalize_tikz_arrow_compat(fragmento):
+    """
+    Compatibilidad defensiva para entornos TeX donde `Stealth` (arrows.meta)
+    no esta disponible o falla intermitentemente.
+    """
+    normalized = str(fragmento or '')
+    normalized = re.sub(r'-\{\s*Stealth(?:\[[^\]]*\])?\s*\}', '->', normalized)
+    normalized = re.sub(r'>=\s*Stealth\b', '>=stealth', normalized)
+    return normalized
+
+
 def limpiar_fragmento_latex(fragmento):
     # 1. Eliminar saltos de lÃ­nea dobles que LaTeX interpreta como \par (nuevo pÃ¡rrafo)
     # Reemplaza cualquier secuencia de 2 o mÃ¡s saltos de lÃ­nea por uno solo.
@@ -347,6 +358,7 @@ def _resolve_latex_compiler():
 
 def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
     fragmento = limpiar_fragmento_latex(fragmento_codigo)
+    fragmento = _normalize_tikz_arrow_compat(fragmento)
     if not fragmento:
         return None, 'No se recibio fragmento de codigo LaTeX.'
 
@@ -469,6 +481,7 @@ def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
 
 def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
     fragmento = limpiar_fragmento_latex(texto_latex)
+    fragmento = _normalize_tikz_arrow_compat(fragmento)
     if not fragmento:
         return None, None, 'No se recibio texto LaTeX para previsualizar.'
 
