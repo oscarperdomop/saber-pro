@@ -256,6 +256,7 @@ LATEX_PREAMBLE_INSTITUCIONAL = r"""
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[spanish]{babel}
+\AtBeginDocument{\shorthandoff{<>}}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{mathtools}
 \usepackage{graphicx}

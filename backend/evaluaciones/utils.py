@@ -17,6 +17,7 @@ LATEX_PREAMBLE_DEFAULT = r"""
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[spanish]{babel}
+\AtBeginDocument{\shorthandoff{<>}}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{mathtools}
 \usepackage{graphicx}
@@ -498,6 +499,7 @@ def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[spanish]{babel}
+\AtBeginDocument{\shorthandoff{<>}}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{mathtools}
 \usepackage{graphicx}
