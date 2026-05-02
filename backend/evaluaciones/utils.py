@@ -22,6 +22,7 @@ LATEX_PREAMBLE_DEFAULT = r"""
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{tikz}
+\usetikzlibrary{arrows.meta}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usepackage{tcolorbox}
@@ -489,6 +490,7 @@ def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{tikz}
+\usetikzlibrary{arrows.meta}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usepackage{tcolorbox}
