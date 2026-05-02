@@ -1,19 +1,23 @@
-# Imagen base ligera y estable para producción
+# Stable lightweight base image for production
 FROM python:3.13-slim
 
-# Evita .pyc y fuerza logs en stdout/stderr
+# Avoid .pyc and force logs to stdout/stderr
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Directorio de trabajo de Django
+# Django working directory
 WORKDIR /app
 
-# Dependencias del sistema para compilar wheels (psycopg2, etc.)
+# System dependencies for wheels/build and LaTeX rendering
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     curl \
     poppler-utils \
+    libgraphite2-3 \
+    libharfbuzz0b \
+    libfreetype6 \
+    libfontconfig1 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -21,18 +25,18 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | s
     install -m 0755 tectonic /usr/local/bin/tectonic && \
     rm -f tectonic
 
-# Copiar requirements primero para aprovechar cache de Docker layers
+# Copy requirements first to leverage Docker layer cache
 COPY requirements.txt /app/requirements.txt
 
-# Instalar dependencias de Python
+# Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r /app/requirements.txt
 
-# Copiar el código del backend
+# Copy backend source code
 COPY . /app
 
-# Exponer puerto Daphne
+# Expose Daphne port
 EXPOSE 8000
 
-# Arranque ASGI con Daphne (soporta HTTP + WebSockets)
+# ASGI startup with Daphne (HTTP + WebSockets)
 CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "core.asgi:application"]
