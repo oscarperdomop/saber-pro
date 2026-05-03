@@ -19,12 +19,14 @@ import {
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import CargaMasivaPreguntasModal from '../components/CargaMasivaPreguntasModal'
 import CompararPreguntasModal from '../components/CompararPreguntasModal'
+import { getCategorias, getCompetencias } from '../services/especificacionesService'
 import preguntasService, {
   type BulkUpdateEstadoPreguntasResponse,
   type CargaMasivaPreguntasResponse,
 } from '../services/preguntasService'
 import ConfirmDialog from '../../../components/ui/ConfirmDialog'
 import RichTextRenderer from '../../../components/ui/RichTextRenderer'
+import type { Categoria, Competencia } from '../../../types/evaluaciones'
 import type { Modulo, Pregunta } from '../../../types/preguntas'
 
 interface ApiErrorResponse {
@@ -116,6 +118,19 @@ const formatEstadoLabel = (estado?: string) => {
   return 'Borrador'
 }
 
+const getRelatedId = (value?: number | string | null): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  return null
+}
+
 const PreguntasModuloPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
@@ -139,6 +154,8 @@ const PreguntasModuloPage = () => {
   const [dificultadFiltro, setDificultadFiltro] = useState<'Todas' | 'Fácil' | 'Media' | 'Alta'>(
     'Todas',
   )
+  const [categoriaFiltro, setCategoriaFiltro] = useState<number | ''>('')
+  const [competenciaFiltro, setCompetenciaFiltro] = useState<number | ''>('')
   const [ordenFiltro, setOrdenFiltro] = useState<'recientes' | 'antiguas' | 'enunciado_az'>(
     'recientes',
   )
@@ -327,6 +344,21 @@ const PreguntasModuloPage = () => {
       ) {
         return false
       }
+      if (categoriaFiltro !== '') {
+        const categoriaPregunta =
+          getRelatedId(pregunta.categoria_id) ?? getRelatedId(pregunta.categoria as number | null)
+        if (categoriaPregunta !== Number(categoriaFiltro)) {
+          return false
+        }
+      }
+      if (competenciaFiltro !== '') {
+        const competenciaPregunta =
+          getRelatedId(pregunta.competencia_id) ??
+          getRelatedId(pregunta.competencia as number | null)
+        if (competenciaPregunta !== Number(competenciaFiltro)) {
+          return false
+        }
+      }
       if (!texto) return true
       return String(pregunta.enunciado ?? '').toLowerCase().includes(texto)
     })
@@ -346,7 +378,15 @@ const PreguntasModuloPage = () => {
     })
 
     return sorted
-  }, [preguntasModulo, searchTerm, estadoFiltro, dificultadFiltro, ordenFiltro])
+  }, [
+    preguntasModulo,
+    searchTerm,
+    estadoFiltro,
+    dificultadFiltro,
+    categoriaFiltro,
+    competenciaFiltro,
+    ordenFiltro,
+  ])
 
   const preguntasSeleccionadas = useMemo(() => {
     const lookup = new Set(seleccionadas)
@@ -371,6 +411,18 @@ const PreguntasModuloPage = () => {
     )
     return match?.id ?? null
   }, [preguntasModulo, modulos, moduloActual])
+
+  const { data: categoriasModulo = [] } = useQuery<Categoria[]>({
+    queryKey: ['categoriasModuloFiltro', moduloPreseleccionado],
+    queryFn: () => getCategorias(Number(moduloPreseleccionado)),
+    enabled: Boolean(moduloPreseleccionado),
+  })
+
+  const { data: competenciasModulo = [] } = useQuery<Competencia[]>({
+    queryKey: ['competenciasModuloFiltro', moduloPreseleccionado],
+    queryFn: () => getCompetencias(Number(moduloPreseleccionado)),
+    enabled: Boolean(moduloPreseleccionado),
+  })
 
   useEffect(() => {
     const state = location.state as { notification?: { type: 'success' | 'info'; message: string } } | null
@@ -404,8 +456,22 @@ const PreguntasModuloPage = () => {
   }, [seleccionadas.length])
 
   useEffect(() => {
+    setCategoriaFiltro('')
+    setCompetenciaFiltro('')
+  }, [moduloPreseleccionado])
+
+  useEffect(() => {
     setCurrentPage(1)
-  }, [moduloActual, searchTerm, estadoFiltro, dificultadFiltro, ordenFiltro, incluirArchivadas])
+  }, [
+    moduloActual,
+    searchTerm,
+    estadoFiltro,
+    dificultadFiltro,
+    categoriaFiltro,
+    competenciaFiltro,
+    ordenFiltro,
+    incluirArchivadas,
+  ])
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -669,8 +735,8 @@ const PreguntasModuloPage = () => {
       )}
 
       <section className="rounded-2xl border border-usco-ocre/70 bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
-          <label className="relative xl:col-span-6">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-7">
+          <label className="relative xl:col-span-2">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
             <input
               type="text"
@@ -681,7 +747,7 @@ const PreguntasModuloPage = () => {
             />
           </label>
 
-          <label className="relative xl:col-span-2">
+          <label className="relative xl:col-span-1">
             <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
             <select
               value={estadoFiltro}
@@ -697,7 +763,7 @@ const PreguntasModuloPage = () => {
             </select>
           </label>
 
-          <label className="relative xl:col-span-2">
+          <label className="relative xl:col-span-1">
             <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
             <select
               value={dificultadFiltro}
@@ -713,7 +779,43 @@ const PreguntasModuloPage = () => {
             </select>
           </label>
 
-          <label className="relative xl:col-span-2">
+          <label className="relative xl:col-span-1">
+            <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
+            <select
+              value={categoriaFiltro}
+              onChange={(event) =>
+                setCategoriaFiltro(event.target.value ? Number(event.target.value) : '')
+              }
+              className="w-full rounded-xl border border-usco-ocre/80 bg-white py-2.5 pl-9 pr-3 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
+            >
+              <option value="">Todas las categorías</option>
+              {categoriasModulo.map((categoria) => (
+                <option key={categoria.id} value={categoria.id}>
+                  {categoria.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="relative xl:col-span-1">
+            <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
+            <select
+              value={competenciaFiltro}
+              onChange={(event) =>
+                setCompetenciaFiltro(event.target.value ? Number(event.target.value) : '')
+              }
+              className="w-full rounded-xl border border-usco-ocre/80 bg-white py-2.5 pl-9 pr-3 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/20"
+            >
+              <option value="">Todas las competencias</option>
+              {competenciasModulo.map((competencia) => (
+                <option key={competencia.id} value={competencia.id}>
+                  {competencia.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="relative xl:col-span-1">
             <Clock3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-usco-gris/70" />
             <select
               value={ordenFiltro}

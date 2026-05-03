@@ -298,6 +298,18 @@ const CrearPreguntaPage = () => {
       if (!opcionesValidas.some((opcion) => opcion.es_correcta)) {
         return 'Debes marcar una opcion correcta.'
       }
+
+      if (formatoOpciones === 'texto') {
+        const seen = new Set<string>()
+        for (const opcion of opcionesValidas) {
+          const key = opcion.texto.trim().toLowerCase().replace(/\s+/g, ' ')
+          if (!key) continue
+          if (seen.has(key)) {
+            return 'No se permiten opciones de respuesta repetidas.'
+          }
+          seen.add(key)
+        }
+      }
     }
 
     return null
