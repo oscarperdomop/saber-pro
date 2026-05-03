@@ -36,6 +36,19 @@ def get_env_setting(name: str) -> str:
     return value
 
 
+def env_bool(name: str, default: bool = False) -> bool:
+    raw = str(os.getenv(name, str(default)) or str(default)).strip().lower()
+    return raw in {'1', 'true', 'yes', 'on'}
+
+
+CLOUDINARY_CLOUD_NAME = str(os.getenv('CLOUDINARY_CLOUD_NAME', '') or '').strip()
+CLOUDINARY_API_KEY = str(os.getenv('CLOUDINARY_API_KEY', '') or '').strip()
+CLOUDINARY_API_SECRET = str(os.getenv('CLOUDINARY_API_SECRET', '') or '').strip()
+USE_CLOUDINARY_STORAGE = all(
+    [CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]
+)
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
@@ -73,6 +86,11 @@ INSTALLED_APPS = [
     'users',
     'evaluaciones',
 ]
+if USE_CLOUDINARY_STORAGE:
+    INSTALLED_APPS += [
+        'cloudinary_storage',
+        'cloudinary',
+    ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -160,17 +178,45 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
-}
+if USE_CLOUDINARY_STORAGE:
+    STORAGES = {
+        "default": {
+            "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+    CLOUDINARY_STORAGE = {
+        'CLOUD_NAME': CLOUDINARY_CLOUD_NAME,
+        'API_KEY': CLOUDINARY_API_KEY,
+        'API_SECRET': CLOUDINARY_API_SECRET,
+        'FOLDER': str(os.getenv('CLOUDINARY_MEDIA_FOLDER', 'saberpro') or 'saberpro').strip() or 'saberpro',
+        'SECURE': True,
+    }
+else:
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = str(os.getenv('MEDIA_URL', '/media/') or '/media/').strip() or '/media/'
+if not MEDIA_URL.startswith('/'):
+    MEDIA_URL = f'/{MEDIA_URL}'
+if not MEDIA_URL.endswith('/'):
+    MEDIA_URL = f'{MEDIA_URL}/'
+
+MEDIA_ROOT = str(os.getenv('MEDIA_ROOT', os.path.join(BASE_DIR, 'media')) or '').strip()
+if not MEDIA_ROOT:
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Permite servir media con Django en despliegues simples (Render + FileSystemStorage).
+# Recomendado activar un disco persistente y apuntar MEDIA_ROOT a ese mount path.
+SERVE_MEDIA_FILES = env_bool('SERVE_MEDIA_FILES', default=not USE_CLOUDINARY_STORAGE)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
