@@ -55,6 +55,8 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
     opciones = OpcionRespuestaSerializer(many=True, required=False)
     modulo = serializers.PrimaryKeyRelatedField(read_only=True)
     modulo_nombre = serializers.CharField(source='modulo.nombre', read_only=True)
+    categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
+    competencia_nombre = serializers.CharField(source='competencia.nombre', read_only=True)
     modulo_id = serializers.PrimaryKeyRelatedField(
         source='modulo',
         queryset=ModuloPrueba.objects.all(),
@@ -82,6 +84,8 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
             'modulo',
             'modulo_id',
             'modulo_nombre',
+            'categoria_nombre',
+            'competencia_nombre',
             'categoria',
             'competencia',
             'nivel_dificultad',
@@ -102,7 +106,14 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
             'updated_at',
             'opciones',
         ]
-        read_only_fields = ['id', 'modulo_nombre', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id',
+            'modulo_nombre',
+            'categoria_nombre',
+            'competencia_nombre',
+            'created_at',
+            'updated_at',
+        ]
 
     @staticmethod
     def _map_dificultad(dificultad):
@@ -139,6 +150,34 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
 
         pregunta.imagen_grafica.save(image_file.name, image_file, save=False)
         pregunta.save(update_fields=['imagen_grafica', 'updated_at'])
+
+    @staticmethod
+    def _normalize_option_text(value):
+        return ' '.join(str(value or '').strip().lower().split())
+
+    @classmethod
+    def _validate_distinct_options(cls, opciones_data):
+        seen = set()
+        duplicates = []
+
+        for opcion in opciones_data:
+            texto = str(opcion.get('texto') or '').strip()
+            if not texto:
+                continue
+            key = cls._normalize_option_text(texto)
+            if key in seen:
+                duplicates.append(texto)
+                continue
+            seen.add(key)
+
+        if duplicates:
+            raise serializers.ValidationError(
+                {
+                    'opciones': [
+                        'No se permiten opciones de respuesta repetidas en una misma pregunta.'
+                    ]
+                }
+            )
 
     def validate(self, attrs):
         modulo = attrs.get('modulo') or getattr(self.instance, 'modulo', None)
@@ -219,6 +258,7 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError(
                             {'opciones': ['Debes marcar al menos una opcion correcta.']}
                         )
+                    self._validate_distinct_options(opciones_data)
 
             soporte_multimedia = str(validated_data.get('soporte_multimedia') or 'NINGUNO')
             if soporte_multimedia == 'NINGUNO':
@@ -277,6 +317,7 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError(
                             {'opciones': ['Debes marcar al menos una opcion correcta.']}
                         )
+                    self._validate_distinct_options(opciones_data)
 
             instance.save()
 

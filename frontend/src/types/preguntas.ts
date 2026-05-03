@@ -25,6 +25,8 @@ export interface Pregunta {
   competencia?: number | null
   categoria_id?: number | null
   competencia_id?: number | null
+  categoria_nombre?: string | null
+  competencia_nombre?: string | null
   modulo: Modulo | number
   modulo_id?: number
   modulo_nombre?: string

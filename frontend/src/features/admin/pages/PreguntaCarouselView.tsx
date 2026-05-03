@@ -68,13 +68,21 @@ const getModuloLabel = (pregunta: Pregunta) => {
 }
 
 const getCategoriaLabel = (pregunta: Pregunta) => {
-  const preguntaWithCategoriaNombre = pregunta as Pregunta & { categoria_nombre?: string | null }
-  if (preguntaWithCategoriaNombre.categoria_nombre?.trim()) {
-    return preguntaWithCategoriaNombre.categoria_nombre.trim()
+  if (pregunta.categoria_nombre?.trim()) {
+    return pregunta.categoria_nombre.trim()
   }
-  if (pregunta.categoria_id) return `Categoría ${pregunta.categoria_id}`
-  if (typeof pregunta.categoria === 'number') return `Categoría ${pregunta.categoria}`
-  return 'Sin categoría'
+  if (pregunta.categoria_id) return `Categoria ${pregunta.categoria_id}`
+  if (typeof pregunta.categoria === 'number') return `Categoria ${pregunta.categoria}`
+  return 'Sin categoria'
+}
+
+const getCompetenciaLabel = (pregunta: Pregunta) => {
+  if (pregunta.competencia_nombre?.trim()) {
+    return pregunta.competencia_nombre.trim()
+  }
+  if (pregunta.competencia_id) return `Competencia ${pregunta.competencia_id}`
+  if (typeof pregunta.competencia === 'number') return `Competencia ${pregunta.competencia}`
+  return 'Sin competencia'
 }
 
 const PreguntaCarouselView = () => {
@@ -206,6 +214,9 @@ const PreguntaCarouselView = () => {
           </span>
           <span className="rounded-full border border-usco-ocre/80 bg-usco-fondo px-3 py-1 text-xs font-semibold text-usco-gris">
             Categoría: {getCategoriaLabel(preguntaActual)}
+          </span>
+          <span className="rounded-full border border-usco-ocre/80 bg-usco-fondo px-3 py-1 text-xs font-semibold text-usco-gris">
+            Competencia: {getCompetenciaLabel(preguntaActual)}
           </span>
           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${getDificultadBadgeClass(preguntaActual.dificultad)}`}>
             Dificultad: {preguntaActual.dificultad ?? 'N/A'}

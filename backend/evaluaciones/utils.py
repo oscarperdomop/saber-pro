@@ -142,6 +142,7 @@ REGLAS ESTRICTAS DE GENERACION:
 1. PLAUSIBILIDAD: Los distractores deben representar errores de analisis, confusiones teoricas, falacias logicas o calculos incorrectos (si aplica) tipicos del area evaluada.
 2. SIMETRIA: Los distractores deben mantener el mismo estilo, longitud y tono gramatical de la respuesta correcta.
 3. EXCLUSIVIDAD: Ningun distractor puede ser parcialmente correcto o ser un sinonimo de la respuesta correcta.
+4. CONTEXTO Y FORMATO: Respeta el contexto cuantitativo del enunciado. Si hay porcentajes, incluye "%". Si hay dinero, usa "$". Si hay decimales, conserva formato decimal (ej: 10.0). Si hay notacion fraccionaria/LaTeX, usa formato coherente (ej: $\\frac{16}{5}$).
 
 FORMATO DE SALIDA ESTRICTO:
 Responde UNICAMENTE con un JSON valido. No incluyas explicaciones, introducciones ni bloques de markdown.

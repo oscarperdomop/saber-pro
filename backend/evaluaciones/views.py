@@ -103,6 +103,103 @@ class GenerarOpcionesIAView(APIView):
 
         return modelos_disponibles[0], modelos_disponibles
 
+    @staticmethod
+    def _normalize_option_text(value):
+        return ' '.join(str(value or '').strip().lower().split())
+
+    @classmethod
+    def _dedupe_options(cls, opciones):
+        unique = []
+        seen = set()
+        for opcion in opciones:
+            texto = str(opcion.get('texto') if isinstance(opcion, dict) else '').strip()
+            if not texto:
+                continue
+            key = cls._normalize_option_text(texto)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(
+                {
+                    'texto': texto,
+                    'es_correcta': bool(opcion.get('es_correcta')) if isinstance(opcion, dict) else False,
+                }
+            )
+        return unique
+
+    @staticmethod
+    def _has_latex_hint(*texts):
+        joined = ' '.join(str(text or '') for text in texts)
+        markers = ['\\frac', '\\sqrt', '\\begin{', '\\(', '\\[', '$']
+        return any(marker in joined for marker in markers)
+
+    @staticmethod
+    def _wrap_latex_if_needed(texto):
+        value = str(texto or '').strip()
+        if not value:
+            return value
+        if value.startswith('$') and value.endswith('$'):
+            return value
+        if '\\frac' in value or '\\sqrt' in value:
+            return f'${value}$'
+        return value
+
+    @staticmethod
+    def _to_latex_fraction_if_plain_ratio(texto):
+        value = str(texto or '').strip()
+        if not value:
+            return value
+        if re.fullmatch(r'-?\d+\s*/\s*-?\d+', value):
+            numerador, denominador = [x.strip() for x in value.split('/', 1)]
+            return f'$\\frac{{{numerador}}}{{{denominador}}}$'
+        return value
+
+    @staticmethod
+    def _looks_numeric_option(texto):
+        value = str(texto or '').strip()
+        return bool(re.fullmatch(r'[\$]?\s*-?\d+(?:\.\d+)?\s*%?', value))
+
+    @classmethod
+    def _apply_context_formatting(cls, opciones, enunciado, contexto):
+        base_text = f"{str(enunciado or '')} {str(contexto or '')}"
+        lower_text = base_text.lower()
+        requiere_porcentaje = '%' in base_text or 'porcentaje' in lower_text
+        requiere_moneda = '$' in base_text or any(
+            token in lower_text for token in ['precio', 'costo', 'valor economico', 'dinero', 'pesos']
+        )
+        requiere_decimal = bool(re.search(r'\d+\.\d+', base_text))
+        requiere_latex = cls._has_latex_hint(enunciado, contexto)
+
+        formatted = []
+        for opcion in opciones:
+            texto = str(opcion.get('texto') or '').strip()
+            if not texto:
+                formatted.append(opcion)
+                continue
+
+            if requiere_latex:
+                texto = cls._to_latex_fraction_if_plain_ratio(texto)
+                texto = cls._wrap_latex_if_needed(texto)
+
+            if cls._looks_numeric_option(texto):
+                limpio = texto.strip()
+                tiene_dolar = '$' in limpio
+                tiene_porcentaje = '%' in limpio
+                numero_match = re.search(r'-?\d+(?:\.\d+)?', limpio)
+                if numero_match:
+                    numero = numero_match.group(0)
+                    if requiere_decimal and '.' not in numero:
+                        numero = f'{numero}.0'
+                    texto = numero
+                    if requiere_moneda or tiene_dolar:
+                        texto = f'${texto}'
+                    if requiere_porcentaje or tiene_porcentaje:
+                        texto = f'{texto}%'
+
+            formatted.append({**opcion, 'texto': texto})
+
+        return formatted
+
     def post(self, request):
         modelos_disponibles = []
         try:
@@ -118,12 +215,17 @@ class GenerarOpcionesIAView(APIView):
                 )
 
             prompt_text = f"""
-Eres un experto pedagogo creador de exámenes tipo ICFES Saber Pro en Colombia.
+Eres un experto pedagogo creador de examenes tipo ICFES Saber Pro en Colombia.
 Dado el siguiente enunciado y contexto, genera 4 opciones de respuesta.
-Solo 1 debe ser correcta, y las otras 3 deben ser distractores plausibles que evalúen errores comunes del estudiante.
+Solo 1 debe ser correcta, y las otras 3 deben ser distractores plausibles que evaluen errores comunes del estudiante.
+Reglas estrictas de consistencia de formato:
+1) Si el enunciado/contexto usa porcentajes, devuelve opciones con "%" (ej: 25%).
+2) Si el enunciado/contexto usa valores economicos, devuelve opciones con "$" (ej: $1200).
+3) Si el enunciado/contexto usa decimales, manten formato decimal en las opciones (ej: 10.0, 2.5).
+4) Si el enunciado/contexto esta en notacion LaTeX/fraccionaria, usa formato matematico coherente (ej: $\frac{{16}}{{5}}$).
 Devuelve el resultado ESTRICTAMENTE como un array de objetos JSON con esta estructura exacta, sin texto adicional, sin formato markdown:
 [
-    {{"texto": "opción correcta aquí", "es_correcta": true}},
+    {{"texto": "opcion correcta aqui", "es_correcta": true}},
     {{"texto": "distractor 1", "es_correcta": false}},
     {{"texto": "distractor 2", "es_correcta": false}},
     {{"texto": "distractor 3", "es_correcta": false}}
@@ -155,10 +257,51 @@ Enunciado: {enunciado}
                     }
                 )
 
+            opciones_normalizadas = self._dedupe_options(opciones_normalizadas)
             if not opciones_normalizadas:
                 raise ValueError('La IA devolvio opciones vacias o con formato invalido.')
 
-            return Response(opciones_normalizadas, status=status.HTTP_200_OK)
+            correctas = [op for op in opciones_normalizadas if op.get('es_correcta')]
+            if not correctas:
+                correctas = [opciones_normalizadas[0]]
+            opcion_correcta = str(correctas[0].get('texto') or '').strip()
+
+            distractores = [
+                str(op.get('texto') or '').strip()
+                for op in opciones_normalizadas
+                if self._normalize_option_text(op.get('texto')) != self._normalize_option_text(opcion_correcta)
+            ]
+
+            if len(distractores) < 3:
+                sugeridos = obtener_distractores_ia(
+                    enunciado=enunciado,
+                    opcion_correcta=opcion_correcta,
+                    modulo='General',
+                    categoria='General',
+                )
+                for sugerido in sugeridos:
+                    limpio = str(sugerido or '').strip()
+                    if not limpio:
+                        continue
+                    if self._normalize_option_text(limpio) == self._normalize_option_text(opcion_correcta):
+                        continue
+                    if any(
+                        self._normalize_option_text(existing) == self._normalize_option_text(limpio)
+                        for existing in distractores
+                    ):
+                        continue
+                    distractores.append(limpio)
+                    if len(distractores) == 3:
+                        break
+
+            if len(distractores) < 3:
+                raise ValueError('No fue posible completar 3 distractores unicos con IA.')
+
+            payload = [{'texto': opcion_correcta, 'es_correcta': True}]
+            payload.extend({'texto': d, 'es_correcta': False} for d in distractores[:3])
+            payload = self._apply_context_formatting(payload, enunciado, contexto)
+
+            return Response(payload, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response(
@@ -401,6 +544,19 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
                 {'opciones': ['Debes marcar al menos una opcion correcta.']},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        seen = set()
+        for opcion in opciones:
+            texto = str(opcion.get('texto') or '').strip()
+            if not texto:
+                continue
+            key = ' '.join(texto.lower().split())
+            if key in seen:
+                return Response(
+                    {'opciones': ['No se permiten opciones de respuesta repetidas en una misma pregunta.']},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            seen.add(key)
 
         return None
 
@@ -1332,6 +1488,26 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
                     if len(distractores) < 3:
                         while len(distractores) < 3:
                             distractores.append('')
+
+                    # Blindaje: evitar opciones repetidas dentro de la misma pregunta.
+                    correcta_key = ' '.join(str(opcion_correcta or '').strip().lower().split())
+                    vistos = {correcta_key}
+                    distractores_unicos = []
+                    for distractor in distractores:
+                        limpio = str(distractor or '').strip()
+                        if not limpio:
+                            continue
+                        key = ' '.join(limpio.lower().split())
+                        if key in vistos:
+                            continue
+                        vistos.add(key)
+                        distractores_unicos.append(limpio)
+
+                    if len(distractores_unicos) < 3:
+                        raise ValueError(
+                            'La fila tiene respuestas repetidas (correcta/distractores) y no fue posible completarla con 3 distractores unicos.'
+                        )
+                    distractores = distractores_unicos[:3]
 
                     pregunta = Pregunta.objects.create(
                         modulo=modulo_final,
