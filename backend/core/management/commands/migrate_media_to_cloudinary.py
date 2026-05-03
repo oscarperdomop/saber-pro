@@ -57,8 +57,13 @@ class Command(BaseCommand):
 
     @staticmethod
     def _resolve_local_path(media_root: str, field_name: str) -> Path:
+        normalized = str(field_name or '').strip()
+        normalized = normalized.lstrip('/')
+        if normalized.lower().startswith('media/'):
+            normalized = normalized[6:]
+
         # Los nombres de ImageField se guardan con "/" incluso en Windows.
-        parts = [p for p in str(field_name or '').split('/') if p]
+        parts = [p for p in normalized.split('/') if p]
         return Path(media_root, *parts)
 
     def _iter_target_rows(self) -> Iterable[tuple[type, str, object]]:
