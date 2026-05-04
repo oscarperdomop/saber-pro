@@ -276,8 +276,8 @@ const LoginPage = () => {
                     }`}
                   >
                     <span
-                      className={`absolute top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow transition-transform duration-300 ${
-                        rememberSession ? "translate-x-[22px]" : "translate-x-[2px]"
+                      className={`absolute left-[2px] top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow transition-transform duration-300 ${
+                        rememberSession ? "translate-x-5" : "translate-x-0"
                       }`}
                     />
                   </button>
