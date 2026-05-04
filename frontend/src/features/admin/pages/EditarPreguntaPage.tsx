@@ -32,6 +32,7 @@ interface EditarPreguntaLocationState {
 }
 
 const CAROUSEL_NOTIFICATION_STORAGE_KEY = 'preguntas_carousel_notification'
+const CAROUSEL_REFRESH_STORAGE_KEY = 'preguntas_carousel_refresh'
 
 const mapDificultadFromPregunta = (dificultad: string): 'Facil' | 'Media' | 'Alta' => {
   if (dificultad === 'Facil') {
@@ -256,6 +257,16 @@ const EditarPreguntaPage = () => {
     onSuccess: (result: ActualizarPreguntaResult) => {
       queryClient.invalidateQueries({ queryKey: ['preguntas'] })
       queryClient.invalidateQueries({ queryKey: ['pregunta', preguntaId] })
+
+      if (fromCarousel && typeof window !== 'undefined' && preguntaId) {
+        window.sessionStorage.setItem(
+          CAROUSEL_REFRESH_STORAGE_KEY,
+          JSON.stringify({
+            originalPreguntaId: String(preguntaId),
+            updatedPreguntaId: String(result.pregunta.id),
+          }),
+        )
+      }
 
       const versionadoMsg =
         'Esta pregunta ya habia sido respondida. Para proteger el historial, se guardo como una nueva version y la anterior fue archivada.'

@@ -1,7 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Bell, Menu, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
+import { Menu, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
 import { getStoredUser, resolveUserRole } from '../../hooks/useAuthStore'
-import { useNotifications } from '../../context/NotificationsContext'
 
 interface HeaderProps {
   onOpenMobileSidebar: () => void
@@ -30,48 +28,6 @@ const Header = ({ onOpenMobileSidebar, onToggleSidebarCollapse, isSidebarCollaps
   const role = resolveUserRole(user)
   const fullName = user ? `${user.nombres} ${user.apellidos}`.trim() : 'Invitado'
   const initials = getInitials(fullName)
-  const { notificationCount, notifications, markAllAsRead, refreshNotifications } = useNotifications()
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
-  const notificationPanelRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (!isNotificationsOpen) {
-      return undefined
-    }
-
-    const onClickOutside = (event: MouseEvent) => {
-      if (!notificationPanelRef.current) {
-        return
-      }
-
-      const target = event.target as Node
-      if (!notificationPanelRef.current.contains(target)) {
-        setIsNotificationsOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', onClickOutside)
-    return () => {
-      document.removeEventListener('mousedown', onClickOutside)
-    }
-  }, [isNotificationsOpen])
-
-  const handleToggleNotifications = () => {
-    const nextOpen = !isNotificationsOpen
-    setIsNotificationsOpen(nextOpen)
-    if (nextOpen) {
-      void (async () => {
-        await refreshNotifications()
-        await markAllAsRead()
-        await refreshNotifications()
-      })()
-    }
-  }
-
-  const handleMarkAllAsRead = async () => {
-    await markAllAsRead()
-    await refreshNotifications()
-  }
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-usco-ocre/70 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
@@ -105,60 +61,6 @@ const Header = ({ onOpenMobileSidebar, onToggleSidebarCollapse, isSidebarCollaps
       </div>
 
       <div className="flex items-center gap-3">
-        <div className="relative" ref={notificationPanelRef}>
-          <button
-            type="button"
-            onClick={handleToggleNotifications}
-            className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-usco-ocre/70 text-usco-gris transition hover:border-usco-vino/40 hover:text-usco-vino"
-            aria-label="Notificaciones"
-            aria-expanded={isNotificationsOpen}
-          >
-            <Bell className="h-4 w-4" />
-            {notificationCount > 0 && !isNotificationsOpen ? (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-usco-vino px-1 text-[10px] font-bold text-white">
-                {notificationCount > 99 ? '99+' : notificationCount}
-              </span>
-            ) : null}
-          </button>
-
-          {isNotificationsOpen ? (
-            <div className="fixed left-2 right-2 top-16 z-[60] overflow-hidden rounded-xl border border-usco-ocre/70 bg-white shadow-xl md:absolute md:left-auto md:right-0 md:top-auto md:mt-2 md:w-[20rem] md:max-w-[85vw]">
-              <div className="flex items-center justify-between border-b border-usco-ocre/60 px-3 py-2">
-                <p className="text-sm font-semibold text-usco-vino">Notificaciones</p>
-                <button
-                  type="button"
-                  onClick={() => void handleMarkAllAsRead()}
-                  className="text-xs font-semibold text-usco-gris transition hover:text-usco-vino"
-                >
-                  Marcar todas
-                </button>
-              </div>
-
-              <div className="max-h-[65vh] overflow-y-auto md:max-h-72">
-                {notifications.length > 0 ? (
-                  notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`border-b border-usco-ocre/40 px-3 py-2 last:border-b-0 ${
-                        notification.leida ? 'bg-white' : 'bg-usco-fondo/70'
-                      }`}
-                    >
-                      <p className="text-sm text-usco-gris">{notification.mensaje}</p>
-                      <p className="mt-1 text-[11px] uppercase tracking-[0.08em] text-usco-gris/70">
-                        {new Date(notification.created_at).toLocaleString('es-CO')}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="px-3 py-6 text-center text-sm text-usco-gris/80">
-                    No tienes notificaciones nuevas.
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
         <div className="text-right">
           <p className="text-[10px] uppercase tracking-[0.16em] text-usco-gris/80 sm:text-xs">{role}</p>
           <p className="max-w-[10rem] truncate text-xs font-semibold text-usco-gris sm:max-w-[20rem] sm:text-sm">
