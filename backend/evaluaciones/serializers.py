@@ -148,8 +148,18 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
                 }
             )
 
-        pregunta.imagen_grafica.save(image_file.name, image_file, save=False)
-        pregunta.save(update_fields=['imagen_grafica', 'updated_at'])
+        try:
+            pregunta.imagen_grafica.save(image_file.name, image_file, save=False)
+            pregunta.save(update_fields=['imagen_grafica', 'updated_at'])
+        except Exception as exc:
+            raise serializers.ValidationError(
+                {
+                    'imagen_grafica': [
+                        'No fue posible subir la imagen al almacenamiento remoto (Cloudinary). '
+                        f'Detalle tecnico: {exc}'
+                    ]
+                }
+            )
 
     @staticmethod
     def _normalize_option_text(value):

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, CheckCircle2, Edit } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import RichTextRenderer from '../../../components/ui/RichTextRenderer'
+import preguntasService from '../services/preguntasService'
 import type { Opcion, Pregunta } from '../../../types/preguntas'
 
 interface CarouselLocationState {
@@ -12,6 +13,7 @@ interface CarouselLocationState {
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/').replace(/\/+$/, '')
 const CAROUSEL_NOTIFICATION_STORAGE_KEY = 'preguntas_carousel_notification'
+const CAROUSEL_REFRESH_STORAGE_KEY = 'preguntas_carousel_refresh'
 
 const backendOrigin = (() => {
   try {
@@ -90,20 +92,25 @@ const PreguntaCarouselView = () => {
   const location = useLocation()
   const locationState = (location.state as CarouselLocationState | null) ?? null
   const { preguntasList = [], startIndex = 0 } = locationState ?? {}
+  const [preguntas, setPreguntas] = useState<Pregunta[]>(preguntasList)
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(
     locationState?.notification ?? null,
   )
 
   const safeStartIndex = useMemo(() => {
-    if (!preguntasList.length) return 0
-    return Math.min(Math.max(startIndex, 0), preguntasList.length - 1)
-  }, [preguntasList.length, startIndex])
+    if (!preguntas.length) return 0
+    return Math.min(Math.max(startIndex, 0), preguntas.length - 1)
+  }, [preguntas.length, startIndex])
 
   const [currentIndex, setCurrentIndex] = useState(safeStartIndex)
 
-  const preguntaActual = preguntasList[currentIndex] ?? null
+  useEffect(() => {
+    setPreguntas(preguntasList)
+  }, [preguntasList])
 
-  if (!preguntasList.length || !preguntaActual) {
+  const preguntaActual = preguntas[currentIndex] ?? null
+
+  if (!preguntas.length || !preguntaActual) {
     return (
       <section className="mx-auto w-full max-w-5xl space-y-4 rounded-2xl border border-usco-ocre/80 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-usco-vino">CARRUSEL DE PREGUNTAS</h1>
@@ -136,7 +143,7 @@ const PreguntaCarouselView = () => {
     Boolean((preguntaActual.codigo_latex ?? '').trim())
 
   const puedeRetroceder = currentIndex > 0
-  const puedeAvanzar = currentIndex < preguntasList.length - 1
+  const puedeAvanzar = currentIndex < preguntas.length - 1
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -154,6 +161,55 @@ const PreguntaCarouselView = () => {
       window.sessionStorage.removeItem(CAROUSEL_NOTIFICATION_STORAGE_KEY)
     }
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const raw = window.sessionStorage.getItem(CAROUSEL_REFRESH_STORAGE_KEY)
+    if (!raw) return
+
+    const run = async () => {
+      try {
+        const parsed = JSON.parse(raw) as {
+          originalPreguntaId?: string
+          updatedPreguntaId?: string
+        }
+        const updatedId = String(parsed?.updatedPreguntaId ?? '').trim()
+        const originalId = String(parsed?.originalPreguntaId ?? '').trim()
+        if (!updatedId) return
+
+        const updatedPregunta = await preguntasService.getPreguntaById(updatedId)
+        setPreguntas((current) => {
+          if (!current.length) return current
+
+          const byUpdated = current.findIndex((p) => String(p.id) === updatedId)
+          if (byUpdated >= 0) {
+            const next = [...current]
+            next[byUpdated] = updatedPregunta
+            return next
+          }
+
+          const byOriginal = originalId
+            ? current.findIndex((p) => String(p.id) === originalId)
+            : -1
+          if (byOriginal >= 0) {
+            const next = [...current]
+            next[byOriginal] = updatedPregunta
+            return next
+          }
+
+          const next = [...current]
+          next[currentIndex] = updatedPregunta
+          return next
+        })
+      } catch {
+        // noop
+      } finally {
+        window.sessionStorage.removeItem(CAROUSEL_REFRESH_STORAGE_KEY)
+      }
+    }
+
+    void run()
+  }, [currentIndex])
 
   useEffect(() => {
     if (!notification) return
@@ -316,7 +372,7 @@ const PreguntaCarouselView = () => {
         <div className="mb-3 h-2 w-full overflow-hidden rounded-full bg-usco-fondo">
           <div
             className="h-full rounded-full bg-usco-vino transition-all"
-            style={{ width: `${((currentIndex + 1) / preguntasList.length) * 100}%` }}
+            style={{ width: `${((currentIndex + 1) / preguntas.length) * 100}%` }}
           />
         </div>
 
@@ -332,12 +388,12 @@ const PreguntaCarouselView = () => {
           </button>
 
           <p className="text-center text-sm font-semibold text-usco-gris">
-            Pregunta {currentIndex + 1} de {preguntasList.length}
+            Pregunta {currentIndex + 1} de {preguntas.length}
           </p>
 
           <button
             type="button"
-            onClick={() => setCurrentIndex((prev) => Math.min(preguntasList.length - 1, prev + 1))}
+            onClick={() => setCurrentIndex((prev) => Math.min(preguntas.length - 1, prev + 1))}
             disabled={!puedeAvanzar}
             className="inline-flex items-center justify-center gap-1 rounded-xl bg-usco-vino px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#741017] disabled:cursor-not-allowed disabled:opacity-40"
           >
