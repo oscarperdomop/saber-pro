@@ -7,6 +7,25 @@ const apiBaseUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/'
 )
 const REFRESH_TOKEN_KEY = 'refresh_token'
 
+const readStorageToken = (key: string): string | null => {
+  const raw = localStorage.getItem(key)
+  if (!raw) {
+    return null
+  }
+
+  const normalized = raw.trim()
+  if (!normalized) {
+    return null
+  }
+
+  const lowered = normalized.toLowerCase()
+  if (lowered === 'null' || lowered === 'undefined') {
+    return null
+  }
+
+  return normalized
+}
+
 interface RefreshTokenResponse {
   access: string
 }
@@ -29,7 +48,7 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use((config) => {
   const requestUrl = config.url ?? ''
   const isAuthLoginRequest = requestUrl.includes('/auth/login/') && !requestUrl.includes('/auth/login/refresh/')
-  const token = localStorage.getItem('token')
+  const token = readStorageToken('token')
 
   if (token && !isAuthLoginRequest) {
     config.headers = config.headers ?? {}
@@ -57,7 +76,7 @@ axiosInstance.interceptors.response.use(
     if (status === 401 && originalRequest && !originalRequest._retry && !isRefreshRequest) {
       originalRequest._retry = true
 
-      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
+      const refreshToken = readStorageToken(REFRESH_TOKEN_KEY)
 
       if (refreshToken) {
         try {

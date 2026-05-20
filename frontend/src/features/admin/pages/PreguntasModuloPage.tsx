@@ -137,6 +137,7 @@ const PreguntasModuloPage = () => {
   const queryClient = useQueryClient()
   const { moduloNombre } = useParams()
   const moduloActual = safeDecode(moduloNombre ?? 'General')
+  const isModuloRoute = location.pathname.startsWith('/preguntas/modulo/')
   const [seleccionadas, setSeleccionadas] = useState<string[]>([])
   const [modalCompararOpen, setModalCompararOpen] = useState(false)
   const [isCargaMasivaOpen, setIsCargaMasivaOpen] = useState(false)
@@ -194,6 +195,7 @@ const PreguntasModuloPage = () => {
         dificultad: dificultadFiltro,
         ordering: orderingParam,
       }),
+    enabled: isModuloRoute,
   })
   const { data: modulos = [] } = useQuery<Modulo[]>({
     queryKey: ['modulos'],
@@ -586,6 +588,10 @@ const PreguntasModuloPage = () => {
         startIndex,
       },
     })
+  }
+
+  if (!isModuloRoute) {
+    return null
   }
 
   if (isLoading) {

@@ -6,6 +6,24 @@ const USER_STORAGE_KEY = 'user'
 const TOKEN_STORAGE_KEY = 'token'
 const REFRESH_TOKEN_STORAGE_KEY = 'refresh_token'
 
+const normalizeStoredToken = (value: string | null): string | null => {
+  if (!value) {
+    return null
+  }
+
+  const normalized = value.trim()
+  if (!normalized) {
+    return null
+  }
+
+  const lowered = normalized.toLowerCase()
+  if (lowered === 'null' || lowered === 'undefined') {
+    return null
+  }
+
+  return normalized
+}
+
 const parseStoredUser = (value: string | null): User | null => {
   if (!value) {
     return null
@@ -23,7 +41,7 @@ export const getStoredUser = (): User | null => {
 }
 
 export const getStoredToken = (): string | null => {
-  return localStorage.getItem(TOKEN_STORAGE_KEY)
+  return normalizeStoredToken(localStorage.getItem(TOKEN_STORAGE_KEY))
 }
 
 export const resolveUserRole = (user: User | null): UserRole => {

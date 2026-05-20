@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import Header from './Header'
 import Sidebar from './Sidebar'
 
 const DRAWER_BREAKPOINT = 1400
 
 const MainLayout = () => {
+  const location = useLocation()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isDrawerMode, setIsDrawerMode] = useState(() => window.innerWidth < DRAWER_BREAKPOINT)
@@ -86,7 +87,7 @@ const MainLayout = () => {
           isDrawerMode={isDrawerMode}
         />
         <main className="flex-1 bg-usco-fondo px-4 py-5 sm:px-6 lg:px-8">
-          <Outlet />
+          <Outlet key={`${location.pathname}${location.search}`} />
         </main>
       </div>
     </div>

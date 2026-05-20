@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import type { User } from '../../types/auth'
-import { resolveDefaultRoute, resolveUserRole } from '../../hooks/useAuthStore'
+import { getStoredToken, resolveDefaultRoute, resolveUserRole } from '../../hooks/useAuthStore'
 
 const ACTIVAR_CUENTA_PATH = '/activar-cuenta'
 
@@ -18,7 +18,7 @@ const parseStoredUser = (value: string | null): User | null => {
 
 const ProtectedRoute = () => {
   const location = useLocation()
-  const token = localStorage.getItem('token')
+  const token = getStoredToken()
   const user = parseStoredUser(localStorage.getItem('user'))
   const userRole = resolveUserRole(user)
   const dashboardPath = resolveDefaultRoute(userRole)
