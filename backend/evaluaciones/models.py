@@ -2,8 +2,10 @@ import os
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from users.models import ProgramaAcademico
+from .utils import normalizar_texto
 
 
 
@@ -45,7 +47,13 @@ class Competencia(models.Model):
 
 
 class Pregunta(models.Model):
-    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='preguntas_creadas')
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='preguntas_creadas',
+    )
     NIVEL_DIFICULTAD_CHOICES = [
         ('Facil', 'Fácil'),
         ('Medio', 'Medio'),
@@ -78,6 +86,7 @@ class Pregunta(models.Model):
         default='NINGUNO',
     )
     enunciado = models.TextField()
+    enunciado_normalizado = models.TextField(editable=False, null=True, blank=True)
     justificacion = models.TextField(null=True, blank=True)
     limite_palabras = models.IntegerField(default=3000, null=True, blank=True)
     rubrica_evaluacion = models.TextField(null=True, blank=True)
@@ -90,6 +99,42 @@ class Pregunta(models.Model):
     version_original = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['enunciado_normalizado'],
+                condition=~models.Q(estado='Archivada'),
+                name='uq_pregunta_enunciado_normalizado_activo',
+            )
+        ]
+
+    def clean(self):
+        texto_limpio = normalizar_texto(self.enunciado)
+        if not texto_limpio:
+            raise ValidationError({'enunciado': 'El enunciado es obligatorio.'})
+
+        duplicado = (
+            Pregunta.objects.filter(enunciado_normalizado=texto_limpio)
+            .exclude(pk=self.pk)
+            .exclude(estado='Archivada')
+            .exists()
+        )
+        if duplicado:
+            raise ValidationError(
+                {'enunciado': 'Esta pregunta ya existe o es muy similar a una registrada.'}
+            )
+
+    def save(self, *args, **kwargs):
+        self.enunciado_normalizado = normalizar_texto(self.enunciado)
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields_set = set(update_fields)
+            update_fields_set.add('enunciado_normalizado')
+            kwargs['update_fields'] = list(update_fields_set)
+
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f'Pregunta {self.id}'

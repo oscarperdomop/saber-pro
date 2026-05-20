@@ -38,7 +38,7 @@ from .models import (
     RespuestaEstudiante,
 )
 from users.models import ProgramaAcademico, Usuario
-from .utils import compilar_preview_latex_base64, obtener_distractores_ia
+from .utils import compilar_preview_latex_base64, normalizar_texto, obtener_distractores_ia
 from .serializers import (
     CategoriaAdminSerializer,
     CalificarEnsayoSerializer,
@@ -1386,9 +1386,9 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
                         )
 
                     enunciado_limpio = str(enunciado).strip()
-                    existe_duplicado = Pregunta.objects.filter(
-                        enunciado__iexact=enunciado_limpio,
-                        modulo=modulo_final,
+                    enunciado_normalizado = normalizar_texto(enunciado_limpio)
+                    existe_duplicado = Pregunta.objects.exclude(estado='Archivada').filter(
+                        enunciado_normalizado=enunciado_normalizado,
                     ).exists()
 
                     if existe_duplicado:

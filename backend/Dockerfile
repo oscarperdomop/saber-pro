@@ -38,5 +38,5 @@ COPY . /app
 # Expose Daphne port
 EXPOSE 8000
 
-# ASGI startup with Daphne (HTTP + WebSockets)
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "core.asgi:application"]
+# Startup: apply migrations, then run ASGI server (Render provides $PORT).
+CMD ["sh", "-c", "python manage.py migrate && python -m daphne -b 0.0.0.0 -p ${PORT:-8000} core.asgi:application"]

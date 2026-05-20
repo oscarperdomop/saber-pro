@@ -15,7 +15,7 @@ from .models import (
     ReglaExamen,
     RespuestaEstudiante,
 )
-from .utils import compilar_fragmento_latex
+from .utils import compilar_fragmento_latex, normalizar_texto
 
 
 class OpcionRespuestaSerializer(serializers.ModelSerializer):
@@ -165,6 +165,21 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
     def _normalize_option_text(value):
         return ' '.join(str(value or '').strip().lower().split())
 
+    @staticmethod
+    def _normalize_enunciado_text(value):
+        return normalizar_texto(value)
+
+    @classmethod
+    def _find_duplicate_enunciado(cls, enunciado, instance=None):
+        normalized_target = cls._normalize_enunciado_text(enunciado)
+        if not normalized_target:
+            return None
+
+        queryset = Pregunta.objects.exclude(estado='Archivada')
+        if instance is not None:
+            queryset = queryset.exclude(pk=instance.pk)
+        return queryset.filter(enunciado_normalizado=normalized_target).only('id').first()
+
     @classmethod
     def _validate_distinct_options(cls, opciones_data):
         seen = set()
@@ -237,6 +252,14 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
 
         if soporte_multimedia == 'LATEX' and not str(codigo_latex or '').strip():
             errors['codigo_latex'] = ['Debes escribir codigo LaTeX cuando el soporte es LATEX.']
+
+        enunciado = attrs.get('enunciado') if 'enunciado' in attrs else getattr(self.instance, 'enunciado', '')
+        if str(enunciado or '').strip():
+            duplicate = self._find_duplicate_enunciado(enunciado=enunciado, instance=self.instance)
+            if duplicate is not None:
+                errors['enunciado'] = [
+                    'Ya existe una pregunta activa con el mismo enunciado.'
+                ]
 
         if errors:
             raise serializers.ValidationError(errors)
