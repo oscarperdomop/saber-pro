@@ -5,6 +5,7 @@ interface HeaderProps {
   onOpenMobileSidebar: () => void
   onToggleSidebarCollapse: () => void
   isSidebarCollapsed: boolean
+  isDrawerMode: boolean
 }
 
 const getInitials = (fullName: string) => {
@@ -23,7 +24,12 @@ const getInitials = (fullName: string) => {
     .join('')
 }
 
-const Header = ({ onOpenMobileSidebar, onToggleSidebarCollapse, isSidebarCollapsed }: HeaderProps) => {
+const Header = ({
+  onOpenMobileSidebar,
+  onToggleSidebarCollapse,
+  isSidebarCollapsed,
+  isDrawerMode,
+}: HeaderProps) => {
   const user = getStoredUser()
   const role = resolveUserRole(user)
   const fullName = user ? `${user.nombres} ${user.apellidos}`.trim() : 'Invitado'
@@ -35,7 +41,9 @@ const Header = ({ onOpenMobileSidebar, onToggleSidebarCollapse, isSidebarCollaps
         <button
           type="button"
           onClick={onOpenMobileSidebar}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-usco-ocre/70 text-usco-gris transition hover:border-usco-vino/40 hover:text-usco-vino md:hidden"
+          className={`h-9 w-9 items-center justify-center rounded-lg border border-usco-ocre/70 text-usco-gris transition hover:border-usco-vino/40 hover:text-usco-vino ${
+            isDrawerMode ? 'inline-flex' : 'hidden'
+          }`}
           aria-label="Abrir menu"
         >
           <Menu className="h-5 w-5" />
@@ -44,7 +52,9 @@ const Header = ({ onOpenMobileSidebar, onToggleSidebarCollapse, isSidebarCollaps
         <button
           type="button"
           onClick={onToggleSidebarCollapse}
-          className="hidden h-9 w-9 items-center justify-center rounded-lg border border-usco-ocre/70 text-usco-gris transition hover:border-usco-vino/40 hover:text-usco-vino md:inline-flex"
+          className={`h-9 w-9 items-center justify-center rounded-lg border border-usco-ocre/70 text-usco-gris transition hover:border-usco-vino/40 hover:text-usco-vino ${
+            isDrawerMode ? 'hidden' : 'inline-flex'
+          }`}
           aria-label="Colapsar menu"
         >
           {isSidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
