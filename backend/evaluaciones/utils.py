@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import time
+import unicodedata
 from tempfile import TemporaryDirectory
 
 import google.generativeai as genai
@@ -46,6 +47,19 @@ LATEX_PREAMBLE_DEFAULT = r"""
 """
 
 LATEX_DOCUMENT_WRAPPER_DEFAULT = r"\begin{document}\newpage{}\end{document}"
+
+
+def normalizar_texto(value):
+    text = str(value or '')
+    text = unicodedata.normalize('NFKD', text)
+    text = ''.join(char for char in text if not unicodedata.combining(char))
+    text = text.lower()
+    # Homogeneiza expresiones matematicas equivalentes como "2+2" y "2 + 2".
+    text = re.sub(r'([+\-*/=<>^%])', r' \1 ', text)
+    # Ignora puntuacion de redaccion que no cambia el significado base.
+    text = re.sub(r'[¿?¡!.,;:"\'`~()\[\]{}|\\]', ' ', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 
 def _clean_text(value):
