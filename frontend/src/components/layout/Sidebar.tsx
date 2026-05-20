@@ -28,6 +28,7 @@ interface NavItem {
 interface SidebarProps {
   isSidebarOpen: boolean
   isSidebarCollapsed: boolean
+  isDrawerMode: boolean
   onCloseMobileSidebar: () => void
 }
 
@@ -98,7 +99,12 @@ const navItems: NavItem[] = [
   },
 ]
 
-const Sidebar = ({ isSidebarOpen, isSidebarCollapsed, onCloseMobileSidebar }: SidebarProps) => {
+const Sidebar = ({
+  isSidebarOpen,
+  isSidebarCollapsed,
+  isDrawerMode,
+  onCloseMobileSidebar,
+}: SidebarProps) => {
   const { logout, user } = useAuthStore()
   const role = resolveUserRole(user)
   const dashboardPath = hasAdminAccess(user) ? '/dashboard' : '/estudiante/dashboard'
@@ -120,25 +126,27 @@ const Sidebar = ({ isSidebarOpen, isSidebarCollapsed, onCloseMobileSidebar }: Si
 
   return (
     <>
-      {isSidebarOpen && (
+      {isDrawerMode && isSidebarOpen && (
         <button
           type="button"
           onClick={onCloseMobileSidebar}
-          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          className="fixed inset-0 z-30 bg-black/40"
           aria-label="Cerrar menu"
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] min-h-[100svh] max-h-[100dvh] flex-col overflow-hidden border-r border-usco-ocre/70 bg-white shadow-xl transition-all duration-300 overscroll-none md:sticky md:top-0 md:z-10 md:h-screen md:max-h-screen md:shadow-none ${
-          isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        } ${isSidebarCollapsed ? 'w-20' : 'w-72 md:w-64'}`}
+        className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] min-h-[100svh] max-h-[100dvh] flex-col overflow-hidden border-r border-usco-ocre/70 bg-white transition-all duration-300 overscroll-none ${
+          isDrawerMode
+            ? `${isSidebarOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full shadow-xl'} w-72`
+            : `sticky top-0 z-10 h-screen max-h-screen translate-x-0 shadow-none ${isSidebarCollapsed ? 'w-20' : 'w-64'}`
+        }`}
       >
-        <div className="flex h-16 items-center border-b border-usco-ocre/70 px-4 md:px-5">
+        <div className="flex h-16 items-center border-b border-usco-ocre/70 px-4 lg:px-5">
           <Link
             to={dashboardPath}
             onClick={() => {
-              if (window.innerWidth < 768) {
+              if (isDrawerMode) {
                 onCloseMobileSidebar()
               }
             }}
@@ -166,7 +174,7 @@ const Sidebar = ({ isSidebarOpen, isSidebarCollapsed, onCloseMobileSidebar }: Si
               key={to}
               to={to}
               onClick={() => {
-                if (window.innerWidth < 768) {
+                if (isDrawerMode) {
                   onCloseMobileSidebar()
                 }
               }}

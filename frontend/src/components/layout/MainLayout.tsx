@@ -3,13 +3,28 @@ import { Outlet } from 'react-router-dom'
 import Header from './Header'
 import Sidebar from './Sidebar'
 
+const DRAWER_BREAKPOINT = 1400
+
 const MainLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isDrawerMode, setIsDrawerMode] = useState(() => window.innerWidth < DRAWER_BREAKPOINT)
 
   useEffect(() => {
-    const isMobile = window.innerWidth < 768
-    if (!isMobile) {
+    const handleResize = () => {
+      const nextDrawerMode = window.innerWidth < DRAWER_BREAKPOINT
+      setIsDrawerMode(nextDrawerMode)
+      if (!nextDrawerMode) {
+        setIsSidebarOpen(false)
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  useEffect(() => {
+    if (!isDrawerMode) {
       return
     }
 
@@ -52,21 +67,23 @@ const MainLayout = () => {
         window.scrollTo(0, storedScrollY)
       }
     }
-  }, [isSidebarOpen])
+  }, [isDrawerMode, isSidebarOpen])
 
   return (
-    <div className="min-h-[100dvh] bg-usco-fondo md:flex md:min-h-screen">
+    <div className={`min-h-[100dvh] bg-usco-fondo ${isDrawerMode ? '' : 'flex min-h-screen'}`}>
       <Sidebar
         isSidebarOpen={isSidebarOpen}
         isSidebarCollapsed={isSidebarCollapsed}
+        isDrawerMode={isDrawerMode}
         onCloseMobileSidebar={() => setIsSidebarOpen(false)}
       />
 
-      <div className="flex min-h-[100dvh] flex-1 flex-col md:min-h-screen">
+      <div className={`flex min-h-[100dvh] flex-1 flex-col ${isDrawerMode ? '' : 'min-h-screen'}`}>
         <Header
           onOpenMobileSidebar={() => setIsSidebarOpen(true)}
           onToggleSidebarCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
           isSidebarCollapsed={isSidebarCollapsed}
+          isDrawerMode={isDrawerMode}
         />
         <main className="flex-1 bg-usco-fondo px-4 py-5 sm:px-6 lg:px-8">
           <Outlet />
