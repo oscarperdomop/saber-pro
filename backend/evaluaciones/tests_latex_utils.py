@@ -1,21 +1,32 @@
 import base64
 import time
+from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
 from evaluaciones.utils import (
     LATEX_PREVIEW_CACHE_TTL_SECONDS,
+    _latex_warmup_lock,
+    _latex_warmup_state,
     _append_latex_compiler_hint,
     _build_preview_cache_key,
     _detect_incomplete_latex_fragment,
     _get_cached_preview_png_bytes,
     _latex_preview_cache,
+    get_latex_warmup_status,
+    trigger_latex_warmup,
 )
 
 
 class LatexUtilsTests(SimpleTestCase):
     def tearDown(self):
         _latex_preview_cache.clear()
+        with _latex_warmup_lock:
+            _latex_warmup_state['running'] = False
+            _latex_warmup_state['started_at'] = None
+            _latex_warmup_state['finished_at'] = None
+            _latex_warmup_state['last_success_at'] = None
+            _latex_warmup_state['last_error'] = None
 
     def test_detect_end_pregunta_without_begin_returns_friendly_message(self):
         fragment = r"""
@@ -72,3 +83,38 @@ class LatexUtilsTests(SimpleTestCase):
 
         self.assertIsNone(cached_bytes)
         self.assertNotIn(cache_key, _latex_preview_cache)
+
+    def test_trigger_latex_warmup_returns_already_ready_when_recent_success(self):
+        with _latex_warmup_lock:
+            _latex_warmup_state['running'] = False
+            _latex_warmup_state['last_success_at'] = time.time()
+            _latex_warmup_state['last_error'] = None
+
+        result = trigger_latex_warmup(force=False)
+
+        self.assertEqual(result.get('action'), 'already_ready')
+        self.assertEqual(result.get('phase'), 'ready')
+
+    @patch('evaluaciones.utils.threading.Thread')
+    def test_trigger_latex_warmup_starts_thread_when_idle(self, thread_mock):
+        with _latex_warmup_lock:
+            _latex_warmup_state['running'] = False
+            _latex_warmup_state['last_success_at'] = None
+            _latex_warmup_state['last_error'] = None
+
+        result = trigger_latex_warmup(force=False)
+
+        self.assertEqual(result.get('action'), 'started')
+        self.assertTrue(result.get('running'))
+        thread_mock.assert_called_once()
+        thread_mock.return_value.start.assert_called_once()
+
+    def test_get_latex_warmup_status_error_phase(self):
+        with _latex_warmup_lock:
+            _latex_warmup_state['running'] = False
+            _latex_warmup_state['last_success_at'] = None
+            _latex_warmup_state['last_error'] = 'boom'
+
+        status_payload = get_latex_warmup_status()
+
+        self.assertEqual(status_payload.get('phase'), 'error')

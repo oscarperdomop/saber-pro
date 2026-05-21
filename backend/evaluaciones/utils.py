@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 import unicodedata
 from tempfile import TemporaryDirectory
@@ -55,12 +56,117 @@ LATEX_DOCUMENT_WRAPPER_DEFAULT = r"\begin{document}\newpage{}\end{document}"
 LATEX_PREVIEW_CACHE_TTL_SECONDS = 300
 LATEX_PREVIEW_CACHE_MAX_ITEMS = 64
 _latex_preview_cache = {}
+LATEX_WARMUP_SUCCESS_TTL_SECONDS = 3600
+_latex_warmup_lock = threading.Lock()
+_latex_warmup_state = {
+    'running': False,
+    'started_at': None,
+    'finished_at': None,
+    'last_success_at': None,
+    'last_error': None,
+}
 
 
 def _build_preview_cache_key(fragmento):
     preview_preamble = _get_latex_preamble().strip()
     cache_key_raw = f"{preview_preamble}\n---\n{str(fragmento or '')}"
     return hashlib.sha256(cache_key_raw.encode('utf-8')).hexdigest()
+
+
+def _get_latex_warmup_snippets():
+    """
+    Snippets cortos para forzar descarga/cache de paquetes frecuentes en producción.
+    """
+    return [
+        r'\begin{enumerate}[label=\Alph*)]\item warmup\end{enumerate}',
+        r'\begin{tikzpicture}\draw[arrow] (0,0) -- (1,1);\end{tikzpicture}',
+        r'\begin{tikzpicture}\begin{axis}[ybar, symbolic x coords={A,B}, xtick=data]\addplot coordinates {(A,1) (B,2)};\end{axis}\end{tikzpicture}',
+        r'\begin{tikzpicture}\pie{60/A,40/B}\end{tikzpicture}',
+        r'\begin{tabular}{cc}\toprule A & B \\\midrule 1 & 2 \\\bottomrule\end{tabular}',
+    ]
+
+
+def _warmup_timeout_seconds():
+    configured_timeout = int(getattr(settings, 'LATEX_PREVIEW_TIMEOUT_SECONDS', 45) or 45)
+    return max(10, min(configured_timeout, 180))
+
+
+def _execute_latex_warmup():
+    timeout_seconds = _warmup_timeout_seconds()
+    last_error = None
+
+    for snippet in _get_latex_warmup_snippets():
+        _pdf_b64, _png_b64, compile_error = compilar_preview_latex_base64(
+            snippet,
+            timeout_seconds=timeout_seconds,
+        )
+        if compile_error:
+            last_error = str(compile_error)
+            break
+
+    now = time.time()
+    with _latex_warmup_lock:
+        _latex_warmup_state['running'] = False
+        _latex_warmup_state['finished_at'] = now
+        _latex_warmup_state['last_error'] = last_error
+        if not last_error:
+            _latex_warmup_state['last_success_at'] = now
+
+
+def get_latex_warmup_status():
+    with _latex_warmup_lock:
+        snapshot = dict(_latex_warmup_state)
+
+    now = time.time()
+    is_recent_success = bool(
+        snapshot.get('last_success_at')
+        and (now - float(snapshot['last_success_at'])) <= LATEX_WARMUP_SUCCESS_TTL_SECONDS
+    )
+
+    if snapshot.get('running'):
+        phase = 'running'
+    elif is_recent_success and not snapshot.get('last_error'):
+        phase = 'ready'
+    elif snapshot.get('last_error'):
+        phase = 'error'
+    else:
+        phase = 'idle'
+
+    return {
+        'phase': phase,
+        'running': bool(snapshot.get('running')),
+        'started_at': snapshot.get('started_at'),
+        'finished_at': snapshot.get('finished_at'),
+        'last_success_at': snapshot.get('last_success_at'),
+        'last_error': snapshot.get('last_error'),
+        'success_ttl_seconds': LATEX_WARMUP_SUCCESS_TTL_SECONDS,
+    }
+
+
+def trigger_latex_warmup(force=False):
+    now = time.time()
+    action = 'started'
+    with _latex_warmup_lock:
+        if _latex_warmup_state['running']:
+            action = 'already_running'
+        else:
+            last_success_at = _latex_warmup_state.get('last_success_at')
+            is_recent_success = bool(
+                last_success_at and (now - float(last_success_at)) <= LATEX_WARMUP_SUCCESS_TTL_SECONDS
+            )
+            if is_recent_success and not force:
+                action = 'already_ready'
+            else:
+                _latex_warmup_state['running'] = True
+                _latex_warmup_state['started_at'] = now
+                _latex_warmup_state['finished_at'] = None
+                _latex_warmup_state['last_error'] = None
+
+    if action == 'started':
+        warmup_thread = threading.Thread(target=_execute_latex_warmup, daemon=True)
+        warmup_thread.start()
+
+    return {'action': action, **get_latex_warmup_status()}
 
 
 def _get_cached_preview_png_bytes(fragmento):

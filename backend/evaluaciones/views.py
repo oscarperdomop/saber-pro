@@ -39,7 +39,13 @@ from .models import (
     RespuestaEstudiante,
 )
 from users.models import ProgramaAcademico, Usuario
-from .utils import compilar_preview_latex_base64, normalizar_texto, obtener_distractores_ia
+from .utils import (
+    compilar_preview_latex_base64,
+    get_latex_warmup_status,
+    normalizar_texto,
+    obtener_distractores_ia,
+    trigger_latex_warmup,
+)
 from .serializers import (
     CategoriaAdminSerializer,
     CalificarEnsayoSerializer,
@@ -366,6 +372,26 @@ class LaTeXPreviewView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class LaTeXWarmupView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    @staticmethod
+    def _parse_bool(value):
+        return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+    def get(self, _request):
+        return Response({'status': 'ok', **get_latex_warmup_status()}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        force = self._parse_bool(request.data.get('force'))
+        result = trigger_latex_warmup(force=force)
+        action = str(result.get('action') or '')
+        response_status = (
+            status.HTTP_202_ACCEPTED if action in {'started', 'already_running'} else status.HTTP_200_OK
+        )
+        return Response({'status': 'ok', **result}, status=response_status)
 
 
 class PreguntaAdminViewSet(viewsets.ModelViewSet):
