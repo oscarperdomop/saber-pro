@@ -12,15 +12,13 @@ type OpcionIAResponse = { texto?: string; es_correcta?: boolean }
 type GenerarOpcionesIAResponse = OpcionIAResponse[] | { opciones?: OpcionIAResponse[] }
 type PreviewLatexResponse = {
   status?: string
-  pdf_base64?: string
-  preview_png_base64?: string
+  preview_svg_base64?: string
   detalle?: string
   detail?: string
 }
 
 export interface PreviewLatexResult {
-  pdfBase64: string
-  pngBase64?: string
+  svgBase64: string
 }
 type ActualizarPreguntaApiResponse =
   | Pregunta
@@ -339,14 +337,13 @@ export const previsualizarLatex = async (textoLatex: string): Promise<PreviewLat
     texto_latex: textoLatex,
   })
 
-  const pdfBase64 = String(data?.pdf_base64 ?? '').trim()
-  if (!pdfBase64) {
+  const svgBase64 = String(data?.preview_svg_base64 ?? '').trim()
+  if (!svgBase64) {
     throw new Error(String(data?.detalle ?? data?.detail ?? 'No se pudo generar la vista previa LaTeX.'))
   }
 
   return {
-    pdfBase64,
-    pngBase64: String(data?.preview_png_base64 ?? '').trim() || undefined,
+    svgBase64,
   }
 }
 

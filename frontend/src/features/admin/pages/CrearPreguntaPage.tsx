@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -44,8 +44,7 @@ const CrearPreguntaPage = () => {
   const [imagenGrafica, setImagenGrafica] = useState<File | null>(null)
   const [imagenGraficaPreview, setImagenGraficaPreview] = useState<string | null>(null)
   const [codigoLatex, setCodigoLatex] = useState('')
-  const [previewPdf, setPreviewPdf] = useState('')
-  const [previewPng, setPreviewPng] = useState('')
+  const [previewSvg, setPreviewSvg] = useState('')
   const [previewError, setPreviewError] = useState('')
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [limitePalabras, setLimitePalabras] = useState<number>(300)
@@ -200,8 +199,7 @@ const CrearPreguntaPage = () => {
 
     if (value !== 'LATEX') {
       setCodigoLatex('')
-      setPreviewPdf('')
-      setPreviewPng('')
+      setPreviewSvg('')
       setPreviewError('')
     }
   }
@@ -218,8 +216,7 @@ const CrearPreguntaPage = () => {
   const handlePreviewLatex = async () => {
     const snippet = codigoLatex.trim()
     if (!snippet) {
-      setPreviewPdf('')
-      setPreviewPng('')
+      setPreviewSvg('')
       setPreviewError('Escribe primero un fragmento LaTeX para previsualizar.')
       return
     }
@@ -229,8 +226,7 @@ const CrearPreguntaPage = () => {
 
     try {
       const preview = await preguntasService.previsualizarLatex(snippet)
-      setPreviewPdf(preview.pdfBase64)
-      setPreviewPng(preview.pngBase64 ?? '')
+      setPreviewSvg(preview.svgBase64)
     } catch (error) {
       const axiosError = error as AxiosError<ApiErrorResponse>
       const responseData = axiosError.response?.data
@@ -240,8 +236,7 @@ const CrearPreguntaPage = () => {
         responseData?.error ??
         'No fue posible compilar el codigo LaTeX.'
       const detalleTecnico = responseData?.detalle_tecnico
-      setPreviewPdf('')
-      setPreviewPng('')
+      setPreviewSvg('')
       setPreviewError(
         detalleTecnico ? `${String(baseMessage)}\n${String(detalleTecnico)}` : String(baseMessage),
       )
@@ -261,7 +256,7 @@ const CrearPreguntaPage = () => {
 
   const validarFormulario = (): string | null => {
     if (moduloId === '') {
-      return 'Debes seleccionar un módulo.'
+      return 'Debes seleccionar un mÃ³dulo.'
     }
 
     if (!enunciado.trim()) {
@@ -269,7 +264,7 @@ const CrearPreguntaPage = () => {
     }
 
     if (categoriaId === '') {
-      return 'Debes seleccionar una categoría.'
+      return 'Debes seleccionar una categorÃ­a.'
     }
 
     if (competenciaId === '') {
@@ -453,7 +448,7 @@ const CrearPreguntaPage = () => {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <section className="space-y-4 rounded-2xl border border-usco-ocre/80 bg-white p-5 shadow-sm">
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-usco-gris">Módulo</span>
+              <span className="mb-1 block text-sm font-semibold text-usco-gris">MÃ³dulo</span>
               <select
                 value={moduloId}
                 onChange={(event) => setModuloId(Number(event.target.value))}
@@ -462,10 +457,10 @@ const CrearPreguntaPage = () => {
                 required
               >
                 {cargandoModulos ? (
-                  <option value="">Cargando módulos...</option>
+                  <option value="">Cargando mÃ³dulos...</option>
                 ) : (
                   <>
-                    <option value="">Selecciona un módulo</option>
+                    <option value="">Selecciona un mÃ³dulo</option>
                     {(modulos ?? []).map((modulo) => (
                       <option key={modulo.id} value={modulo.id}>
                         {modulo.nombre}
@@ -478,7 +473,7 @@ const CrearPreguntaPage = () => {
 
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">
-                Categoría o Contenido
+                CategorÃ­a o Contenido
               </span>
               <select
                 value={categoriaId}
@@ -487,7 +482,7 @@ const CrearPreguntaPage = () => {
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15 disabled:bg-gray-100"
               >
                 <option value="" disabled>
-                  -- Selecciona una categoría --
+                  -- Selecciona una categorÃ­a --
                 </option>
                 {categorias?.map((categoria) => (
                   <option key={categoria.id} value={categoria.id}>
@@ -556,8 +551,8 @@ const CrearPreguntaPage = () => {
                 onChange={(event) => setEstado(event.target.value as 'Borrador' | 'Publicada')}
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
               >
-                <option value="Borrador">✎ Borrador (No saldra en examenes)</option>
-                <option value="Publicada">✓ Publicada (Lista para usar)</option>
+                <option value="Borrador">âœŽ Borrador (No saldra en examenes)</option>
+                <option value="Publicada">âœ“ Publicada (Lista para usar)</option>
               </select>
             </label>
 
@@ -646,29 +641,28 @@ const CrearPreguntaPage = () => {
                     type="button"
                     onClick={handlePreviewLatex}
                     disabled={isLoadingPreview}
-                    className="inline-flex items-center rounded-lg border border-usco-vino/40 bg-white px-3 py-2 text-xs font-semibold text-usco-vino transition hover:bg-usco-vino/5 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center gap-2 rounded-lg border border-usco-vino/40 bg-white px-3 py-2 text-xs font-semibold text-usco-vino transition hover:bg-usco-vino/5 disabled:cursor-not-allowed disabled:opacity-80"
                   >
-                    {isLoadingPreview ? 'Compilando...' : '⚡ Previsualizar LaTeX'}
+                    {isLoadingPreview ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span className="animate-pulse">Compilando...</span>
+                      </>
+                    ) : (
+                      '⚡ Previsualizar LaTeX'
+                    )}
                   </button>
                   {previewError && (
                     <div className="whitespace-pre-wrap rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-700">
                       {previewError}
                     </div>
                   )}
-                  {previewPng ? (
+                  {previewSvg ? (
                     <div className="overflow-hidden rounded-lg border border-usco-ocre/60 bg-white p-2">
                       <img
-                        src={`data:image/png;base64,${previewPng}`}
+                        src={`data:image/svg+xml;base64,${previewSvg}`}
                         alt="Vista previa LaTeX"
                         className="mx-auto max-h-64 w-auto object-contain"
-                      />
-                    </div>
-                  ) : previewPdf ? (
-                    <div className="overflow-hidden rounded-lg border border-usco-ocre/60 bg-white">
-                      <iframe
-                        title="Vista previa PDF LaTeX"
-                        src={`data:application/pdf;base64,${previewPdf}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-                        className="h-56 w-full"
                       />
                     </div>
                   ) : null}
@@ -843,3 +837,5 @@ const CrearPreguntaPage = () => {
 }
 
 export default CrearPreguntaPage
+
+

@@ -8,22 +8,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Django working directory
 WORKDIR /app
 
-# System dependencies for wheels/build and LaTeX rendering
+# System dependencies for wheels/build and LaTeX rendering (DVI -> SVG)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
-    curl \
-    poppler-utils \
+    texlive-latex-base \
+    texlive-latex-extra \
+    texlive-pictures \
+    texlive-lang-spanish \
+    dvisvgm \
     libgraphite2-3 \
     libharfbuzz0b \
     libfreetype6 \
     libfontconfig1 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-RUN curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh && \
-    install -m 0755 tectonic /usr/local/bin/tectonic && \
-    rm -f tectonic
 
 # Copy requirements first to leverage Docker layer cache
 COPY requirements.txt /app/requirements.txt

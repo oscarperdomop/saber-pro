@@ -53,7 +53,7 @@ const LoginPage = () => {
     const message = inactive
       ? "Tu cuenta ha sido desactivada por la institucion. Por favor, comunicate con Soporte Tecnico."
       : backendDetail ||
-        "Credenciales incorrectas. Verifica tu correo institucional y contrasena.";
+        "Credenciales incorrectas. Verifica tu correo institucional y contraseña.";
 
     return { inactive, message };
   };
@@ -90,7 +90,7 @@ const LoginPage = () => {
     },
     {
       icon: BarChart3,
-      title: "Analitica de Resultados",
+      title: "Analítica de resultados",
       description: "Monitorea tu avance por modulos y competencias.",
     },
     {
@@ -122,10 +122,10 @@ const LoginPage = () => {
           <div className="relative z-10 max-w-xl space-y-6">
             <div>
               <h2 className="text-4xl font-bold leading-tight">
-                Ingresa a tu entorno academico institucional
+                Ingresa a tu entorno académico institucional
               </h2>
               <p className="mt-4 text-lg text-white/80">
-                Gestiona simulacros, resultados y Analitica con identidad
+                Gestiona simulacros, resultados y analítica con identidad
                 oficial USCO.
               </p>
             </div>
@@ -179,7 +179,7 @@ const LoginPage = () => {
               <form onSubmit={handleSubmit} className="px-6 py-8">
                 <header className="mb-6">
                   <h2 className="text-[28px] font-bold tracking-tight text-[#1c1c1e]">
-                    Inicio de sesion
+                    Inicio de sesión
                   </h2>
                   <p className="mt-1 text-[15px] text-[#8e8e93]">
                     Accede con tu correo institucional
@@ -192,7 +192,7 @@ const LoginPage = () => {
                       htmlFor="correo_institucional_mobile"
                       className="mb-2 ml-1 block text-[13px] font-medium text-[#3c3c43]/60"
                     >
-                      Correo Institucional
+                      Correo institucional
                     </label>
                     <div className="relative flex items-center rounded-xl border border-transparent bg-[#f2f2f7] transition focus-within:border-[#006633]/20 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#006633]/40">
                       <div className="pl-4 pr-2">
@@ -224,13 +224,13 @@ const LoginPage = () => {
                         htmlFor="password_mobile"
                         className="text-[13px] font-medium text-[#3c3c43]/60"
                       >
-                        Contrasena
+                        Contraseña
                       </label>
                       <button
                         type="button"
                         className="text-[13px] font-medium text-[#8B1538] transition-colors hover:text-[#6d1029]"
                       >
-                        Olvidaste tu contrasena?
+                        ¿Olvidaste tu contraseña?
                       </button>
                     </div>
                     <div className="relative flex items-center rounded-xl border border-transparent bg-[#f2f2f7] transition focus-within:border-[#006633]/20 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#006633]/40">
@@ -251,7 +251,7 @@ const LoginPage = () => {
                         type="button"
                         onClick={() => setShowPassword((previous) => !previous)}
                         className="px-4 py-2 text-[#8e8e93] transition-colors hover:text-[#1c1c1e]"
-                        aria-label="Mostrar u ocultar contrasena"
+                        aria-label="Mostrar u ocultar contraseña"
                       >
                         {showPassword ? (
                           <EyeOff className="h-5 w-5" strokeWidth={1.5} />
@@ -265,7 +265,7 @@ const LoginPage = () => {
 
                 <div className="mb-6 mt-4 flex items-center justify-between py-2">
                   <span className="text-[15px] text-[#1c1c1e]">
-                    Mantener sesion iniciada
+                    Mantener sesión iniciada
                   </span>
                   <button
                     type="button"
@@ -303,11 +303,11 @@ const LoginPage = () => {
                   {loginMutation.isPending ? (
                     <>
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      Iniciando sesion...
+                      Iniciando sesión...
                     </>
                   ) : (
                     <>
-                      Iniciar sesion
+                      Iniciar sesión
                       <ArrowRight className="h-5 w-5" />
                     </>
                   )}
@@ -318,13 +318,13 @@ const LoginPage = () => {
 
               <div className="px-6 py-5 text-center">
                 <p className="mb-1 text-[13px] text-[#8e8e93]">
-                  Problemas para ingresar?
+                  ¿Problemas para ingresar?
                 </p>
                 <button
                   type="button"
                   className="text-[15px] font-medium text-[#006633] transition-colors hover:text-[#004d26]"
                 >
-                  Contacta soporte tecnico
+                  Contacta soporte técnico
                 </button>
               </div>
             </div>
@@ -336,7 +336,7 @@ const LoginPage = () => {
 
           <div className="hidden w-full max-w-lg rounded-2xl border border-usco-ocre/60 bg-white p-8 shadow-[0_12px_40px_rgba(77,98,108,0.16)] lg:block">
             <header>
-              <h2 className="text-3xl font-bold text-usco-vino">Inicio de sesion</h2>
+              <h2 className="text-3xl font-bold text-usco-vino">Inicio de sesión</h2>
               <p className="mt-2 text-sm text-usco-gris">
                 Accede con tu correo institucional para continuar en la
                 plataforma.
@@ -349,7 +349,7 @@ const LoginPage = () => {
                   htmlFor="correo_institucional"
                   className="text-sm font-medium text-usco-gris"
                 >
-                  Correo Institucional
+                  Correo institucional
                 </label>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-usco-gris/75" />
@@ -374,13 +374,13 @@ const LoginPage = () => {
                     htmlFor="password"
                     className="text-sm font-medium text-usco-gris"
                   >
-                    Contrasena
+                    Contraseña
                   </label>
                   <button
                     type="button"
                     className="text-xs font-semibold text-usco-vino hover:underline"
                   >
-                    Olvidaste tu contrasena?
+                    ¿Olvidaste tu contraseña?
                   </button>
                 </div>
                 <div className="relative">
@@ -399,7 +399,7 @@ const LoginPage = () => {
                     type="button"
                     onClick={() => setShowPassword((previous) => !previous)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-usco-gris/70 transition hover:text-usco-vino"
-                    aria-label="Mostrar u ocultar contrasena"
+                    aria-label="Mostrar u ocultar contraseña"
                   >
                     {showPassword ? (
                       <EyeOff className="h-5 w-5" />
@@ -417,7 +417,7 @@ const LoginPage = () => {
                   onChange={(event) => setRememberSession(event.target.checked)}
                   className="h-4 w-4 rounded border-usco-ocre text-usco-vino focus:ring-usco-vino"
                 />
-                Mantener sesion iniciada
+                Mantener sesión iniciada
               </label>
 
               {loginError && (
@@ -440,11 +440,11 @@ const LoginPage = () => {
                 {loginMutation.isPending ? (
                   <>
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    Iniciando sesion...
+                    Iniciando sesión...
                   </>
                 ) : (
                   <>
-                    Iniciar sesion
+                    Iniciar sesión
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
@@ -460,12 +460,12 @@ const LoginPage = () => {
             </div>
 
             <p className="text-center text-sm text-usco-gris/90">
-              Problemas para ingresar?{" "}
+              ¿Problemas para ingresar?{" "}
               <button
                 type="button"
                 className="font-semibold text-usco-vino hover:underline"
               >
-                Contacta soporte tecnico
+                Contacta soporte técnico
               </button>
             </p>
           </div>

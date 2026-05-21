@@ -11,6 +11,7 @@ from decimal import Decimal
 import google.generativeai as genai
 import pandas as pd
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Avg, Case, Count, DurationField, ExpressionWrapper, F, FloatField, Q, Value, When
 from django.db.models.functions import Cast
@@ -340,7 +341,7 @@ class LaTeXPreviewView(APIView):
 
         timeout_seconds = int(getattr(settings, 'LATEX_PREVIEW_TIMEOUT_SECONDS', 45) or 45)
         timeout_seconds = max(5, min(timeout_seconds, 180))
-        pdf_base64, png_base64, compile_error = compilar_preview_latex_base64(
+        svg_base64, compile_error = compilar_preview_latex_base64(
             texto_latex,
             timeout_seconds=timeout_seconds,
         )
@@ -367,8 +368,7 @@ class LaTeXPreviewView(APIView):
         return Response(
             {
                 'status': 'ok',
-                'pdf_base64': pdf_base64,
-                'preview_png_base64': png_base64,
+                'preview_svg_base64': svg_base64,
             },
             status=status.HTTP_200_OK,
         )
@@ -3340,7 +3340,12 @@ class AnaliticasAdminViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'])
     def kpis_globales(self, request):
-        simulacro_id = request.query_params.get('simulacro_id')
+        simulacro_id = str(request.query_params.get('simulacro_id') or '').strip()
+        cache_timeout = int(getattr(settings, 'DASHBOARD_CACHE_TTL_SECONDS', 180))
+        cache_key = f"admin:kpis_globales:simulacro:{simulacro_id or 'all'}"
+        cached_payload = cache.get(cache_key)
+        if cached_payload is not None:
+            return Response(cached_payload, status=status.HTTP_200_OK)
 
         intentos = IntentoExamen.objects.filter(estado__in=['Finalizado', 'Pendiente Calificacion'])
         if simulacro_id:
@@ -3410,19 +3415,24 @@ class AnaliticasAdminViewSet(viewsets.ViewSet):
             for item in top_preguntas_criticas_raw
         ]
 
-        return Response(
-            {
-                'total_evaluaciones_finalizadas': total_intentos,
-                'total_preguntas_criticas': total_preguntas_criticas,
-                'tasa_media_error_criticas': round(float(tasa_media_error_criticas), 2),
-                'participacion_por_programa': list(participacion_programas),
-                'top_preguntas_criticas': top_preguntas_criticas,
-            },
-            status=status.HTTP_200_OK,
-        )
+        payload = {
+            'total_evaluaciones_finalizadas': total_intentos,
+            'total_preguntas_criticas': total_preguntas_criticas,
+            'tasa_media_error_criticas': round(float(tasa_media_error_criticas), 2),
+            'participacion_por_programa': list(participacion_programas),
+            'top_preguntas_criticas': top_preguntas_criticas,
+        }
+        cache.set(cache_key, payload, timeout=cache_timeout)
+        return Response(payload, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='cobertura-programa')
     def cobertura_programa(self, request):
+        cache_timeout = int(getattr(settings, 'DASHBOARD_CACHE_TTL_SECONDS', 180))
+        cache_key = 'admin:cobertura_programa:v1'
+        cached_payload = cache.get(cache_key)
+        if cached_payload is not None:
+            return Response(cached_payload, status=status.HTTP_200_OK)
+
         cobertura = (
             ProgramaAcademico.objects.annotate(
                 total_estudiantes=Count(
@@ -3458,7 +3468,9 @@ class AnaliticasAdminViewSet(viewsets.ViewSet):
                 }
             )
 
-        return Response({'results': data}, status=status.HTTP_200_OK)
+        payload = {'results': data}
+        cache.set(cache_key, payload, timeout=cache_timeout)
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class ReportesViewSet(viewsets.ViewSet):
@@ -3489,6 +3501,17 @@ class ReportesViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'], url_path='resumen')
     def resumen(self, request):
+        programa_id = str(request.query_params.get('programa_id') or '').strip()
+        simulacro_id = str(request.query_params.get('simulacro_id') or '').strip()
+        cache_timeout = int(getattr(settings, 'DASHBOARD_CACHE_TTL_SECONDS', 180))
+        cache_key = (
+            f"admin:reportes_resumen:programa:{programa_id or 'all'}"
+            f":simulacro:{simulacro_id or 'all'}"
+        )
+        cached_payload = cache.get(cache_key)
+        if cached_payload is not None:
+            return Response(cached_payload, status=status.HTTP_200_OK)
+
         respuestas = self._base_respuestas(request)
 
         promedio_general = respuestas.aggregate(
@@ -3540,15 +3563,14 @@ class ReportesViewSet(viewsets.ViewSet):
                 )
             return data
 
-        return Response(
-            {
-                'promedio_general_prueba': round(float(promedio_general.get('promedio') or 0.0) * 300, 2),
-                'total_respuestas': int(promedio_general.get('total') or 0),
-                'promedio_por_dificultad': _map_bucket(por_dificultad, 'pregunta__nivel_dificultad'),
-                'promedio_por_competencia': _map_bucket(por_competencia, 'pregunta__competencia__nombre'),
-                'promedio_por_categoria': _map_bucket(por_categoria, 'pregunta__categoria__nombre'),
-                'desempeno_por_genero': _map_bucket(por_genero, 'intento__estudiante__genero'),
-                'desempeno_por_semestre': _map_bucket(por_semestre, 'intento__estudiante__semestre_actual'),
-            },
-            status=status.HTTP_200_OK,
-        )
+        payload = {
+            'promedio_general_prueba': round(float(promedio_general.get('promedio') or 0.0) * 300, 2),
+            'total_respuestas': int(promedio_general.get('total') or 0),
+            'promedio_por_dificultad': _map_bucket(por_dificultad, 'pregunta__nivel_dificultad'),
+            'promedio_por_competencia': _map_bucket(por_competencia, 'pregunta__competencia__nombre'),
+            'promedio_por_categoria': _map_bucket(por_categoria, 'pregunta__categoria__nombre'),
+            'desempeno_por_genero': _map_bucket(por_genero, 'intento__estudiante__genero'),
+            'desempeno_por_semestre': _map_bucket(por_semestre, 'intento__estudiante__semestre_actual'),
+        }
+        cache.set(cache_key, payload, timeout=cache_timeout)
+        return Response(payload, status=status.HTTP_200_OK)

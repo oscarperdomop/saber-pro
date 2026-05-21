@@ -78,8 +78,9 @@ class Pregunta(models.Model):
     nivel_dificultad = models.CharField(max_length=15, choices=NIVEL_DIFICULTAD_CHOICES)
     contexto_texto = models.TextField(null=True, blank=True)
     contexto_imagen = models.ImageField(upload_to=generar_ruta_imagen_segura, null=True, blank=True)
-    imagen_grafica = models.ImageField(upload_to=generar_ruta_imagen_segura, null=True, blank=True)
+    imagen_grafica = models.FileField(upload_to=generar_ruta_imagen_segura, null=True, blank=True)
     codigo_latex = models.TextField(null=True, blank=True)
+    codigo_latex_md5 = models.CharField(max_length=32, null=True, blank=True, db_index=True)
     soporte_multimedia = models.CharField(
         max_length=10,
         choices=SOPORTE_MULTIMEDIA_CHOICES,

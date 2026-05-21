@@ -11,7 +11,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import adminService from "../../admin/services/adminService";
-import RichTextRenderer from "../../../components/ui/RichTextRenderer";
 import SaberProLoader from "../../../components/ui/SaberProLoader";
 import type {
   AnaliticasResponse,
@@ -37,6 +36,9 @@ const calculateErrorRate = (pregunta: PreguntaCritica): number => {
   );
 };
 
+const summarizeQuestion = (content: string): string =>
+  content.replace(/\s+/g, " ").trim().slice(0, 220);
+
 const AdminDashboard = () => {
   const [programaFiltro, setProgramaFiltro] = useState<number | "">("");
   const [dimensionActiva, setDimensionActiva] = useState<
@@ -49,11 +51,17 @@ const AdminDashboard = () => {
   >({
     queryKey: ["kpisGlobales"],
     queryFn: adminService.getKpisGlobales,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
   });
 
   const { data: cobertura } = useQuery({
     queryKey: ["coberturaPrograma"],
     queryFn: adminService.getCoberturaPrograma,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
   });
 
   const { data: reportes } = useQuery<
@@ -65,6 +73,9 @@ const AdminDashboard = () => {
       adminService.getReportesResumen(
         typeof programaFiltro === "number" ? programaFiltro : undefined,
       ),
+    staleTime: 3 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
   });
 
   const rowsByDimension = useMemo<ReporteBucket[]>(() => {
@@ -340,10 +351,12 @@ const AdminDashboard = () => {
                           className="max-w-[420px] whitespace-normal break-words"
                           title={pregunta.pregunta__enunciado}
                         >
-                          <RichTextRenderer
-                            content={pregunta.pregunta__enunciado}
-                            className="[&_p]:my-0 [&_p]:leading-6 [&_.katex-display]:my-1"
-                          />
+                          <p className="m-0 leading-6">
+                            {summarizeQuestion(pregunta.pregunta__enunciado)}
+                            {pregunta.pregunta__enunciado.length > 220
+                              ? "..."
+                              : ""}
+                          </p>
                         </div>
                       </td>
                       <td className="border border-usco-ocre/70 px-4 py-3 text-center text-sm font-semibold text-usco-gris">

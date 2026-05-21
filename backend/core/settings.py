@@ -271,8 +271,9 @@ CSRF_TRUSTED_ORIGINS = [
     if origin.strip()
 ]
 
-LATEX_COMPILER = os.getenv('LATEX_COMPILER', 'pdflatex').strip() or 'pdflatex'
+LATEX_COMPILER = os.getenv('LATEX_COMPILER', 'latex').strip() or 'latex'
 LATEX_POPPLER_PATH = os.getenv('LATEX_POPPLER_PATH', '').strip()
+LATEX_DVISVGM_BINARY = os.getenv('LATEX_DVISVGM_BINARY', 'dvisvgm').strip() or 'dvisvgm'
 
 
 def _env_int(name: str, default: int, min_value: int, max_value: int) -> int:
@@ -298,7 +299,7 @@ LATEX_PREVIEW_TIMEOUT_SECONDS = _env_int(
 )
 
 LATEX_PREAMBLE_INSTITUCIONAL = r"""
-\documentclass[preview,border=2pt]{standalone}
+\documentclass[preview,border=2pt,dvisvgm]{standalone}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[spanish]{babel}

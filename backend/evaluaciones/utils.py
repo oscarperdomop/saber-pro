@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import io
 import json
 import os
 import re
@@ -16,7 +15,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 
 LATEX_PREAMBLE_DEFAULT = r"""
-\documentclass[preview,border=2pt]{standalone}
+\documentclass[preview,border=2pt,dvisvgm]{standalone}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[spanish]{babel}
@@ -96,7 +95,7 @@ def _execute_latex_warmup():
     last_error = None
 
     for snippet in _get_latex_warmup_snippets():
-        _pdf_b64, _png_b64, compile_error = compilar_preview_latex_base64(
+        _svg_b64, compile_error = compilar_preview_latex_base64(
             snippet,
             timeout_seconds=timeout_seconds,
         )
@@ -169,9 +168,9 @@ def trigger_latex_warmup(force=False):
     return {'action': action, **get_latex_warmup_status()}
 
 
-def _get_cached_preview_png_bytes(fragmento):
+def _get_cached_preview_svg_bytes(fragmento):
     """
-    Reutiliza la imagen PNG de preview si existe y sigue vigente.
+    Reutiliza el SVG de preview si existe y sigue vigente.
     Esto evita recompilar en guardado cuando el usuario ya previsualizo el mismo snippet.
     """
     cache_key = _build_preview_cache_key(fragmento)
@@ -179,18 +178,44 @@ def _get_cached_preview_png_bytes(fragmento):
     if not cached:
         return None
 
-    cached_at, _cached_pdf_b64, cached_png_b64 = cached
+    cached_at = None
+    cached_svg_b64 = None
+    if isinstance(cached, (tuple, list)):
+        # Compatibilidad con formato antiguo:
+        # (timestamp, pdf_base64, preview_png_base64)
+        if len(cached) >= 3:
+            cached_at = cached[0]
+            cached_svg_b64 = cached[2]
+        elif len(cached) >= 2:
+            cached_at = cached[0]
+            cached_svg_b64 = cached[1]
+    elif isinstance(cached, dict):
+        cached_at = cached.get('cached_at')
+        cached_svg_b64 = cached.get('svg_b64')
+
+    if cached_at is None or not cached_svg_b64:
+        _latex_preview_cache.pop(cache_key, None)
+        return None
+
     if (time.time() - cached_at) > LATEX_PREVIEW_CACHE_TTL_SECONDS:
         _latex_preview_cache.pop(cache_key, None)
         return None
 
-    if not cached_png_b64:
+    if not cached_svg_b64:
         return None
 
     try:
-        return base64.b64decode(cached_png_b64)
+        return base64.b64decode(cached_svg_b64)
     except Exception:
         return None
+
+
+def _get_cached_preview_png_bytes(fragmento):
+    """
+    Compatibilidad temporal para tests/llamadores antiguos.
+    Internamente ahora retorna bytes SVG.
+    """
+    return _get_cached_preview_svg_bytes(fragmento)
 
 
 def normalizar_texto(value):
@@ -604,30 +629,29 @@ def limpiar_fragmento_latex(fragmento):
     return fragmento_limpio.strip()
 
 
-def _resolve_latex_compiler():
-    """
-    Resuelve un compilador LaTeX disponible en este orden:
-    1) settings.LATEX_COMPILER
-    2) variable de entorno LATEX_COMPILER
-    3) binario local portable en backend/tools/tectonic/tectonic.exe
-    4) PATH del sistema: pdflatex, xelatex, tectonic
-    """
-    configured = str(getattr(settings, 'LATEX_COMPILER', '') or '').strip()
-    env_configured = str(os.getenv('LATEX_COMPILER', '') or '').strip()
+def sanitizar_fragmento_latex(fragmento_codigo):
+    fragmento = limpiar_fragmento_latex(fragmento_codigo)
+    fragmento = _normalize_tikz_arrow_compat(fragmento)
+    fragmento = _normalize_pgf_pie_options(fragmento)
+    fragmento = _normalize_tikz_legacy_arrow_style(fragmento)
+    return fragmento
 
-    local_tectonic = os.path.join(str(getattr(settings, 'BASE_DIR', '')), 'tools', 'tectonic', 'tectonic.exe')
 
-    candidates = [
-        configured,
-        env_configured,
-        local_tectonic,
-        'pdflatex',
-        'xelatex',
-        'tectonic',
-    ]
+def calcular_hash_md5_latex(fragmento_codigo):
+    fragmento = sanitizar_fragmento_latex(fragmento_codigo)
+    incomplete_error = _detect_incomplete_latex_fragment(fragmento)
+    if incomplete_error:
+        raise ValueError(incomplete_error)
+    if not fragmento:
+        raise ValueError('No se recibio fragmento de codigo LaTeX.')
 
+    return hashlib.md5(fragmento.encode('utf-8')).hexdigest(), fragmento
+
+
+def _resolve_binary(candidates):
     seen = set()
     for candidate in candidates:
+        candidate = str(candidate or '').strip()
         if not candidate:
             continue
 
@@ -636,23 +660,38 @@ def _resolve_latex_compiler():
             continue
         seen.add(key)
 
-        # Ruta explÃ­cita
         if os.path.isabs(candidate) or os.path.sep in candidate or candidate.endswith('.exe'):
             if os.path.exists(candidate):
                 return candidate
             continue
 
-        # Binario en PATH
         resolved = shutil.which(candidate)
         if resolved:
             return resolved
-
     return None
+
+
+def _resolve_latex_engine():
+    configured = str(getattr(settings, 'LATEX_COMPILER', '') or '').strip()
+    env_configured = str(os.getenv('LATEX_COMPILER', '') or '').strip()
+    def _is_dvi_capable_name(binary_name):
+        base = os.path.basename(str(binary_name or '')).lower()
+        return base in {'latex', 'latex.exe', 'pdflatex', 'pdflatex.exe', 'pdftex', 'pdftex.exe'}
+
+    preferred = [name for name in [configured, env_configured] if _is_dvi_capable_name(name)]
+    fallback = ['latex', 'pdflatex', 'pdftex', configured, env_configured]
+    return _resolve_binary(preferred + fallback)
+
+
+def _resolve_dvisvgm_binary():
+    configured = str(getattr(settings, 'LATEX_DVISVGM_BINARY', '') or '').strip()
+    env_configured = str(os.getenv('LATEX_DVISVGM_BINARY', '') or '').strip()
+    return _resolve_binary([configured, env_configured, 'dvisvgm'])
 
 
 def _build_compiler_env():
     """
-    Construye un entorno de compilacion estable para Tectonic/TeX,
+    Construye un entorno de compilacion TeX estable,
     incluyendo un cache local reutilizable dentro del contenedor.
     """
     env = os.environ.copy()
@@ -680,217 +719,61 @@ def _build_compiler_env():
     return env
 
 
-def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
-    fragmento = limpiar_fragmento_latex(fragmento_codigo)
-    fragmento = _normalize_tikz_arrow_compat(fragmento)
-    fragmento = _normalize_pgf_pie_options(fragmento)
-    fragmento = _normalize_tikz_legacy_arrow_style(fragmento)
-    incomplete_error = _detect_incomplete_latex_fragment(fragmento)
-    if incomplete_error:
-        return None, incomplete_error
-    if not fragmento:
-        return None, 'No se recibio fragmento de codigo LaTeX.'
-
-    cached_png_bytes = _get_cached_preview_png_bytes(fragmento)
-    if cached_png_bytes:
-        file_name = f"{str(nombre_archivo or 'pregunta_latex').strip()}.png"
-        return ContentFile(cached_png_bytes, name=file_name), None
-
-    preamble = _get_latex_preamble()
-    wrapper = _get_latex_wrapper()
-    if '\\newpage{}' in wrapper:
-        document_body = wrapper.replace('\\newpage{}', fragmento)
-    else:
-        document_body = f"\\begin{{document}}\n{fragmento}\n\\end{{document}}"
-
-    codigo_completo = f"{preamble}\n{document_body}\n"
-
-    compiler = _resolve_latex_compiler()
-    poppler_path = str(getattr(settings, 'LATEX_POPPLER_PATH', '') or '').strip() or None
-
-    if not compiler:
-        return None, (
-            "No se encontro un compilador LaTeX disponible. Configura LATEX_COMPILER "
-            "o instala MiKTeX/TeXLive (pdflatex/xelatex), o usa el binario portable "
-            "de Tectonic en backend/tools/tectonic/tectonic.exe."
-        )
-
-    try:
-        from pdf2image import convert_from_path
-    except Exception as exc:
-        return None, (
-            'No fue posible importar pdf2image. Instala la dependencia con '
-            "'pip install pdf2image' y configura poppler en el servidor."
-        )
-
-    timeout_seconds = int(getattr(settings, 'LATEX_COMPILE_TIMEOUT_SECONDS', 30) or 30)
-    timeout_seconds = max(5, min(timeout_seconds, 180))
-
-    with TemporaryDirectory() as temp_dir:
-        tex_path = os.path.join(temp_dir, 'input.tex')
-        with open(tex_path, 'w', encoding='utf-8') as tex_file:
-            tex_file.write(codigo_completo)
-
-        try:
-            compiler_name = os.path.basename(str(compiler)).lower()
-            if 'tectonic' in compiler_name:
-                compile_cmd = [
-                    compiler,
-                    '--keep-logs',
-                    '--keep-intermediates',
-                    'input.tex',
-                ]
-            else:
-                compile_cmd = [
-                    compiler,
-                    '-interaction=nonstopmode',
-                    '-halt-on-error',
-                    '-file-line-error',
-                    'input.tex',
-                ]
-
-            subprocess.run(
-                compile_cmd,
-                cwd=temp_dir,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding='utf-8',
-                errors='ignore',
-                timeout=timeout_seconds,
-                env=_build_compiler_env(),
-            )
-        except subprocess.TimeoutExpired:
-            return None, (
-                f'Error de compilacion LaTeX: Timeout excedido ({timeout_seconds}s). '
-                'Si es el primer render con Tectonic, puede estar descargando paquetes.'
-            )
-        except FileNotFoundError:
-            return None, (
-                f"No se encontro el compilador '{compiler}' en el servidor. "
-                "Verifica LATEX_COMPILER, PATH o usa backend/tools/tectonic/tectonic.exe."
-            )
-        except subprocess.CalledProcessError as exc:
-            output = '\n'.join(
-                [
-                    str(exc.stdout or '').strip(),
-                    str(exc.stderr or '').strip(),
-                ]
-            ).strip()
-            output = output[-1200:] if output else 'Error desconocido de compilacion.'
-            output = _append_latex_compiler_hint(output, fragmento)
-            if 'pgfplots@@environment@axis was complete' in output:
-                output += (
-                    "\nSugerencia: revisa que el bloque \\begin{axis}[...] cierre correctamente con "
-                    "\\end{axis}, evita comentarios '%' dentro de opciones y valida llaves/corchetes balanceados."
-                )
-            return None, f'Error de compilacion LaTeX: {output}'
-
-        pdf_path = os.path.join(temp_dir, 'input.pdf')
-        if not os.path.exists(pdf_path):
-            return None, 'No se genero el PDF de salida al compilar LaTeX.'
-
-        try:
-            images = convert_from_path(
-                pdf_path,
-                dpi=300,
-                fmt='png',
-                single_file=True,
-                poppler_path=poppler_path,
-            )
-        except Exception as exc:
-            return None, (
-                'No se pudo convertir el PDF generado a imagen PNG. '
-                f'Detalle: {exc}'
-            )
-
-        if not images:
-            return None, 'La conversion PDF -> PNG no produjo imagenes.'
-
-        image_buffer = io.BytesIO()
-        images[0].save(image_buffer, format='PNG')
-        image_buffer.seek(0)
-        file_name = f"{str(nombre_archivo or 'pregunta_latex').strip()}.png"
-        return ContentFile(image_buffer.read(), name=file_name), None
+def _sanitize_compiler_output(raw_text):
+    lines = []
+    for line in str(raw_text or '').splitlines():
+        lower = line.lower()
+        if 'fontconfig error' in lower:
+            continue
+        if 'no such file: (null)' in lower:
+            continue
+        lines.append(line)
+    return '\n'.join(lines).strip()
 
 
-def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
-    fragmento = limpiar_fragmento_latex(texto_latex)
-    fragmento = _normalize_tikz_arrow_compat(fragmento)
-    fragmento = _normalize_pgf_pie_options(fragmento)
-    fragmento = _normalize_tikz_legacy_arrow_style(fragmento)
-    incomplete_error = _detect_incomplete_latex_fragment(fragmento)
-    if incomplete_error:
-        return None, None, incomplete_error
-    if not fragmento:
-        return None, None, 'No se recibio texto LaTeX para previsualizar.'
-
-    compiler = _resolve_latex_compiler()
-    if not compiler:
-        return None, None, (
-            "No se encontro un compilador LaTeX disponible. Configura LATEX_COMPILER "
-            "o instala MiKTeX/TeXLive (pdflatex/xelatex), o usa el binario portable "
-            "de Tectonic en backend/tools/tectonic/tectonic.exe."
-        )
-
-    preview_preamble = _get_latex_preamble().strip()
+def _cache_svg_preview(fragmento, svg_b64):
     cache_key = _build_preview_cache_key(fragmento)
-    now = time.time()
-    cached = _latex_preview_cache.get(cache_key)
-    if cached:
-        cached_at, cached_pdf_b64, cached_png_b64 = cached
-        if (now - cached_at) <= LATEX_PREVIEW_CACHE_TTL_SECONDS:
-            return cached_pdf_b64, cached_png_b64, None
-        _latex_preview_cache.pop(cache_key, None)
+    if len(_latex_preview_cache) >= LATEX_PREVIEW_CACHE_MAX_ITEMS:
+        oldest_key = next(iter(_latex_preview_cache.keys()))
+        _latex_preview_cache.pop(oldest_key, None)
+    _latex_preview_cache[cache_key] = (time.time(), svg_b64)
 
-    codigo_completo = (
-        f"{preview_preamble}\n"
-        r"\begin{document}" "\n"
-        f"{fragmento}\n"
-        r"\end{document}" "\n"
-    )
 
-    configured_timeout = int(getattr(settings, 'LATEX_PREVIEW_TIMEOUT_SECONDS', 45) or 45)
-    timeout_seconds = int(timeout_seconds or configured_timeout)
-    timeout_seconds = max(5, min(timeout_seconds, 180))
+def _compilar_latex_a_svg_bytes(codigo_completo, fragmento, timeout_seconds):
+    latex_engine = _resolve_latex_engine()
+    if not latex_engine:
+        return None, (
+            "No se encontro un binario LaTeX para generar DVI. Configura LATEX_COMPILER "
+            "o instala un distribuidor TeX con el comando 'latex'."
+        )
+
+    dvisvgm_binary = _resolve_dvisvgm_binary()
+    if not dvisvgm_binary:
+        return None, (
+            "No se encontro el binario dvisvgm. Instala dvisvgm y/o configura "
+            "LATEX_DVISVGM_BINARY en el entorno."
+        )
 
     with TemporaryDirectory() as temp_dir:
-        tex_path = os.path.join(temp_dir, 'input.tex')
+        tex_path = os.path.join(temp_dir, 'snippet.tex')
+        dvi_path = os.path.join(temp_dir, 'snippet.dvi')
+        svg_path = os.path.join(temp_dir, 'snippet.svg')
+
         with open(tex_path, 'w', encoding='utf-8') as tex_file:
             tex_file.write(codigo_completo)
 
-        def _sanitize_compiler_output(raw_text):
-            lines = []
-            for line in str(raw_text or '').splitlines():
-                lower = line.lower()
-                if 'fontconfig error' in lower:
-                    continue
-                if 'no such file: (null)' in lower:
-                    continue
-                lines.append(line)
-            return '\n'.join(lines).strip()
-
         try:
-            compiler_name = os.path.basename(str(compiler)).lower()
-            if 'tectonic' in compiler_name:
-                compile_cmd = [
-                    compiler,
-                    '--keep-logs',
-                    '--keep-intermediates',
-                    'input.tex',
-                ]
-            else:
-                compile_cmd = [
-                    compiler,
-                    '-interaction=nonstopmode',
-                    '-halt-on-error',
-                    '-file-line-error',
-                    'input.tex',
-                ]
-
+            latex_engine_basename = os.path.basename(str(latex_engine)).lower()
+            latex_cmd = [
+                latex_engine,
+                '-interaction=nonstopmode',
+                '-halt-on-error',
+            ]
+            if latex_engine_basename in {'pdflatex', 'pdflatex.exe', 'pdftex', 'pdftex.exe'}:
+                latex_cmd.append('-output-format=dvi')
+            latex_cmd.append('snippet.tex')
             subprocess.run(
-                compile_cmd,
+                latex_cmd,
                 cwd=temp_dir,
                 check=True,
                 stdout=subprocess.PIPE,
@@ -910,86 +793,136 @@ def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
             ).strip()
             timeout_output = _sanitize_compiler_output(timeout_output)
             timeout_output = timeout_output[-1200:] if timeout_output else ''
-            detalle = (
-                f'Error de compilacion LaTeX: Timeout excedido '
-                f'({timeout_seconds}s).'
-            )
+            detalle = f'Error de compilacion LaTeX: Timeout excedido ({timeout_seconds}s).'
             if timeout_output:
                 detalle = f'{detalle}\n{timeout_output}'
-            return None, None, detalle
+            return None, detalle
         except FileNotFoundError:
-            return None, None, (
-                f"No se encontro el compilador '{compiler}' en el servidor. "
-                "Verifica LATEX_COMPILER, PATH o usa backend/tools/tectonic/tectonic.exe."
+            return None, (
+                f"No se encontro el compilador '{latex_engine}' en el servidor. "
+                "Verifica LATEX_COMPILER y PATH."
             )
         except subprocess.CalledProcessError as exc:
-            output = '\n'.join(
-                [
-                    str(exc.stdout or '').strip(),
-                    str(exc.stderr or '').strip(),
-                ]
-            ).strip()
+            output = '\n'.join([str(exc.stdout or '').strip(), str(exc.stderr or '').strip()]).strip()
             output = _sanitize_compiler_output(output)
             output = output[-2000:] if output else 'Error desconocido de compilacion.'
             output = _append_latex_compiler_hint(output, fragmento)
-            return None, None, f'Error de compilacion LaTeX: {output}'
+            return None, f'Error de compilacion LaTeX: {output}'
 
-        pdf_path = os.path.join(temp_dir, 'input.pdf')
-        if not os.path.exists(pdf_path):
-            return None, None, 'No se genero el PDF de salida al compilar LaTeX.'
+        if not os.path.exists(dvi_path):
+            return None, 'No se genero el archivo DVI de salida al compilar LaTeX.'
 
-        with open(pdf_path, 'rb') as pdf_file:
-            pdf_bytes = pdf_file.read()
-
-        if not pdf_bytes:
-            return None, None, 'La compilacion finalizo sin contenido PDF.'
-
-        pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
-        png_b64 = None
-
-        # Render PNG para un preview mas "tight" y agradable en UI.
         try:
-            from pdf2image import convert_from_path
-            from PIL import Image, ImageChops
-
-            poppler_path = str(getattr(settings, 'LATEX_POPPLER_PATH', '') or '').strip() or None
-            images = convert_from_path(
-                pdf_path,
-                dpi=220,
-                fmt='png',
-                first_page=1,
-                last_page=1,
-                single_file=True,
-                poppler_path=poppler_path,
+            dvisvgm_cmd = [
+                dvisvgm_binary,
+                '--no-fonts',
+                '--exact-bbox',
+                '-o',
+                'snippet.svg',
+                'snippet.dvi',
+            ]
+            subprocess.run(
+                dvisvgm_cmd,
+                cwd=temp_dir,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                errors='ignore',
+                timeout=timeout_seconds,
+                env=_build_compiler_env(),
             )
-            if images:
-                image = images[0].convert('RGB')
-                white_bg = Image.new('RGB', image.size, (255, 255, 255))
-                diff = ImageChops.difference(image, white_bg)
-                bbox = diff.getbbox()
-                if bbox:
-                    image = image.crop(bbox)
-                # Margen visual minimo para no cortar trazos
-                image = image.crop(
-                    (
-                        max(0, image.getbbox()[0] - 2) if image.getbbox() else 0,
-                        max(0, image.getbbox()[1] - 2) if image.getbbox() else 0,
-                        min(image.width, image.getbbox()[2] + 2) if image.getbbox() else image.width,
-                        min(image.height, image.getbbox()[3] + 2) if image.getbbox() else image.height,
-                    )
-                )
-                png_buffer = io.BytesIO()
-                image.save(png_buffer, format='PNG')
-                png_buffer.seek(0)
-                png_b64 = base64.b64encode(png_buffer.read()).decode('utf-8')
-        except Exception:
-            png_b64 = None
+        except subprocess.TimeoutExpired:
+            return None, f'Error de conversion SVG: Timeout excedido ({timeout_seconds}s).'
+        except FileNotFoundError:
+            return None, (
+                f"No se encontro el conversor '{dvisvgm_binary}' en el servidor. "
+                "Verifica LATEX_DVISVGM_BINARY y PATH."
+            )
+        except subprocess.CalledProcessError as exc:
+            output = '\n'.join([str(exc.stdout or '').strip(), str(exc.stderr or '').strip()]).strip()
+            output = _sanitize_compiler_output(output)
+            output = output[-2000:] if output else 'Error desconocido de conversion SVG.'
+            return None, f'Error de conversion SVG: {output}'
 
-        if len(_latex_preview_cache) >= LATEX_PREVIEW_CACHE_MAX_ITEMS:
-            oldest_key = next(iter(_latex_preview_cache.keys()))
-            _latex_preview_cache.pop(oldest_key, None)
-        _latex_preview_cache[cache_key] = (now, pdf_b64, png_b64)
+        if not os.path.exists(svg_path):
+            return None, 'No se genero el archivo SVG de salida al convertir LaTeX.'
 
-        return pdf_b64, png_b64, None
+        with open(svg_path, 'rb') as svg_file:
+            svg_bytes = svg_file.read()
+
+        if not svg_bytes:
+            return None, 'La conversion a SVG finalizo sin contenido.'
+
+        return svg_bytes, None
 
 
+def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
+    try:
+        _hash, fragmento = calcular_hash_md5_latex(fragmento_codigo)
+    except ValueError as exc:
+        return None, str(exc)
+
+    cached_svg_bytes = _get_cached_preview_svg_bytes(fragmento)
+    if cached_svg_bytes:
+        file_name = f"{str(nombre_archivo or 'pregunta_latex').strip()}.svg"
+        return ContentFile(cached_svg_bytes, name=file_name), None
+
+    preamble = _get_latex_preamble()
+    wrapper = _get_latex_wrapper()
+    if '\\newpage{}' in wrapper:
+        document_body = wrapper.replace('\\newpage{}', fragmento)
+    else:
+        document_body = f"\\begin{{document}}\n{fragmento}\n\\end{{document}}"
+
+    codigo_completo = f"{preamble}\n{document_body}\n"
+
+    timeout_seconds = int(getattr(settings, 'LATEX_COMPILE_TIMEOUT_SECONDS', 12) or 12)
+    timeout_seconds = max(2, min(timeout_seconds, 120))
+
+    svg_bytes, error = _compilar_latex_a_svg_bytes(codigo_completo, fragmento, timeout_seconds)
+    if error:
+        return None, error
+
+    svg_b64 = base64.b64encode(svg_bytes).decode('utf-8')
+    _cache_svg_preview(fragmento, svg_b64)
+
+    file_name = f"{str(nombre_archivo or 'pregunta_latex').strip()}.svg"
+    return ContentFile(svg_bytes, name=file_name), None
+
+
+def compilar_preview_latex_base64(texto_latex, timeout_seconds=8):
+    try:
+        _hash, fragmento = calcular_hash_md5_latex(texto_latex)
+    except ValueError as exc:
+        return None, str(exc)
+
+    cache_key = _build_preview_cache_key(fragmento)
+    now = time.time()
+    cached = _latex_preview_cache.get(cache_key)
+    if cached:
+        cached_at, cached_svg_b64 = cached
+        if (now - cached_at) <= LATEX_PREVIEW_CACHE_TTL_SECONDS:
+            return cached_svg_b64, None
+        _latex_preview_cache.pop(cache_key, None)
+
+    preview_preamble = _get_latex_preamble().strip()
+    codigo_completo = (
+        f"{preview_preamble}\n"
+        r"\begin{document}" "\n"
+        f"{fragmento}\n"
+        r"\end{document}" "\n"
+    )
+
+    configured_timeout = int(getattr(settings, 'LATEX_PREVIEW_TIMEOUT_SECONDS', 8) or 8)
+    timeout_seconds = int(timeout_seconds or configured_timeout)
+    timeout_seconds = max(2, min(timeout_seconds, 120))
+
+    svg_bytes, error = _compilar_latex_a_svg_bytes(codigo_completo, fragmento, timeout_seconds)
+    if error:
+        return None, error
+
+    svg_b64 = base64.b64encode(svg_bytes).decode('utf-8')
+    _cache_svg_preview(fragmento, svg_b64)
+    return svg_b64, None
