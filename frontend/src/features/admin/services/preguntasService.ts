@@ -350,6 +350,23 @@ export const previsualizarLatex = async (textoLatex: string): Promise<PreviewLat
   }
 }
 
+export const precalentarCompiladorLatex = async (): Promise<void> => {
+  // Warm-up inicial: fuerza descarga/cache de paquetes TeX al entrar al formulario.
+  // Se ejecuta en background y sus errores no bloquean la UI.
+  const snippetWarmup = String.raw`\begin{enumerate}[label=\Alph*)]\item warmup\end{enumerate}
+\begin{tikzpicture}
+\begin{axis}[ybar, symbolic x coords={A,B}, xtick=data]
+\addplot coordinates {(A,1) (B,2)};
+\end{axis}
+\end{tikzpicture}`
+
+  await axiosInstance.post(
+    '/evaluaciones/ia/preview-latex/',
+    { texto_latex: snippetWarmup },
+    { timeout: 120000 },
+  )
+}
+
 export const cargaMasivaPreguntas = async ({
   file,
   moduloId,
@@ -487,6 +504,7 @@ const preguntasService = {
   descargarPlantillaCargaMasivaPreguntas,
   revertirCargaMasiva,
   getPreguntasCriticas,
+  precalentarCompiladorLatex,
 }
 
 export default preguntasService
