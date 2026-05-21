@@ -1,5 +1,6 @@
 import csv
 import json
+import logging
 import re
 import time
 import uuid
@@ -53,6 +54,8 @@ from .serializers import (
     RespuestaEstudianteDetalleSerializer,
     RespuestaEstudianteUpdateSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class GenerarOpcionesIAView(APIView):
@@ -363,7 +366,12 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
     _option_pattern = re.compile(r'^opciones\[(\d+)\]\[(id|texto|es_correcta|imagen)\]$')
 
     def get_queryset(self):
-        queryset = Pregunta.objects.all().order_by('created_at', 'id')
+        queryset = (
+            Pregunta.objects.select_related('modulo', 'categoria', 'competencia')
+            .prefetch_related('opciones')
+            .all()
+            .order_by('created_at', 'id')
+        )
         incluir_archivadas = str(
             self.request.query_params.get('incluir_archivadas')
             or self.request.query_params.get('include_archivadas')
@@ -416,6 +424,58 @@ class PreguntaAdminViewSet(viewsets.ModelViewSet):
             queryset = queryset.order_by(ordering, 'id')
 
         return queryset
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        try:
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+        except Exception as exc:
+            logger.exception(
+                'Fallo serializando listado de preguntas',
+                extra={
+                    'query_params': dict(request.query_params),
+                    'user_id': str(getattr(request.user, 'id', '')),
+                },
+            )
+
+            resultados = []
+            omisiones = []
+
+            for pregunta in queryset:
+                try:
+                    resultados.append(self.get_serializer(pregunta).data)
+                except Exception as item_exc:
+                    omisiones.append(
+                        {
+                            'id': str(getattr(pregunta, 'id', '')),
+                            'error': str(item_exc)[:240],
+                        }
+                    )
+
+            if resultados:
+                return Response(
+                    {
+                        'results': resultados,
+                        'warnings': {
+                            'skipped_count': len(omisiones),
+                            'skipped_sample': omisiones[:10],
+                            'message': (
+                                'Se omitieron preguntas con datos inconsistentes para evitar '
+                                'interrumpir el listado completo.'
+                            ),
+                        },
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response(
+                {
+                    'detalle': 'No fue posible cargar las preguntas del módulo.',
+                    'detalle_tecnico': str(exc),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @staticmethod
     def _map_dificultad(dificultad):

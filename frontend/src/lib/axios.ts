@@ -49,10 +49,12 @@ axiosInstance.interceptors.request.use((config) => {
   const requestUrl = config.url ?? ''
   const isAuthLoginRequest = requestUrl.includes('/auth/login/') && !requestUrl.includes('/auth/login/refresh/')
   const token = readStorageToken('token')
+  config.headers = config.headers ?? {}
 
   if (token && !isAuthLoginRequest) {
-    config.headers = config.headers ?? {}
     config.headers.Authorization = `Bearer ${token}`
+  } else if (config.headers.Authorization) {
+    delete config.headers.Authorization
   }
 
   return config
