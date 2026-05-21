@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import io
 import json
 import os
@@ -25,6 +26,7 @@ LATEX_PREAMBLE_DEFAULT = r"""
 \usepackage{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta}
+\usepackage{pgf-pie}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usepackage{tcolorbox}
@@ -47,6 +49,9 @@ LATEX_PREAMBLE_DEFAULT = r"""
 """
 
 LATEX_DOCUMENT_WRAPPER_DEFAULT = r"\begin{document}\newpage{}\end{document}"
+LATEX_PREVIEW_CACHE_TTL_SECONDS = 300
+LATEX_PREVIEW_CACHE_MAX_ITEMS = 64
+_latex_preview_cache = {}
 
 
 def normalizar_texto(value):
@@ -294,6 +299,33 @@ def _normalize_tikz_arrow_compat(fragmento):
     return normalized
 
 
+def _normalize_pgf_pie_options(fragmento):
+    """
+    pgf-pie es sensible a claves con espacio inicial (ej: '/pgf/ color').
+    Normaliza \\pie[...] para aceptar fragmentos con indentacion y saltos.
+    """
+    source = str(fragmento or '')
+
+    def _clean_options(match):
+        options_raw = match.group(1) or ''
+        parts = options_raw.split(',')
+        cleaned_parts = []
+        for part in parts:
+            token = part.strip()
+            if not token:
+                continue
+            if '=' in token:
+                key, value = token.split('=', 1)
+                token = f"{key.strip()}={value.strip()}"
+            cleaned_parts.append(token)
+        return r"\pie[" + ', '.join(cleaned_parts) + ']'
+
+    # Soporta \pie[...] y \pie*[...]
+    source = re.sub(r'\\pie\*\s*\[(.*?)\]', _clean_options, source, flags=re.DOTALL)
+    source = re.sub(r'\\pie\s*\[(.*?)\]', _clean_options, source, flags=re.DOTALL)
+    return source
+
+
 def limpiar_fragmento_latex(fragmento):
     # 1. Eliminar saltos de lÃ­nea dobles que LaTeX interpreta como \par (nuevo pÃ¡rrafo)
     # Reemplaza cualquier secuencia de 2 o mÃ¡s saltos de lÃ­nea por uno solo.
@@ -372,9 +404,40 @@ def _resolve_latex_compiler():
     return None
 
 
+def _build_compiler_env():
+    """
+    Construye un entorno de compilacion estable para Tectonic/TeX,
+    incluyendo un cache local reutilizable dentro del contenedor.
+    """
+    env = os.environ.copy()
+
+    base_dir = str(getattr(settings, 'BASE_DIR', '') or '').strip()
+    if base_dir:
+        cache_root = os.path.join(base_dir, '.cache')
+    else:
+        cache_root = os.path.join(os.getcwd(), '.cache')
+
+    tectonic_cache = env.get('TECTONIC_CACHE_PATH') or os.path.join(cache_root, 'tectonic')
+    xdg_cache_home = env.get('XDG_CACHE_HOME') or cache_root
+
+    try:
+        os.makedirs(tectonic_cache, exist_ok=True)
+    except Exception:
+        pass
+    try:
+        os.makedirs(xdg_cache_home, exist_ok=True)
+    except Exception:
+        pass
+
+    env.setdefault('TECTONIC_CACHE_PATH', tectonic_cache)
+    env.setdefault('XDG_CACHE_HOME', xdg_cache_home)
+    return env
+
+
 def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
     fragmento = limpiar_fragmento_latex(fragmento_codigo)
     fragmento = _normalize_tikz_arrow_compat(fragmento)
+    fragmento = _normalize_pgf_pie_options(fragmento)
     if not fragmento:
         return None, 'No se recibio fragmento de codigo LaTeX.'
 
@@ -441,6 +504,7 @@ def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
                 encoding='utf-8',
                 errors='ignore',
                 timeout=timeout_seconds,
+                env=_build_compiler_env(),
             )
         except subprocess.TimeoutExpired:
             return None, (
@@ -498,6 +562,7 @@ def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
 def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
     fragmento = limpiar_fragmento_latex(texto_latex)
     fragmento = _normalize_tikz_arrow_compat(fragmento)
+    fragmento = _normalize_pgf_pie_options(fragmento)
     if not fragmento:
         return None, None, 'No se recibio texto LaTeX para previsualizar.'
 
@@ -509,37 +574,16 @@ def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
             "de Tectonic en backend/tools/tectonic/tectonic.exe."
         )
 
-    preview_preamble = r"""
-\documentclass[preview,border=2pt]{standalone}
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage[spanish]{babel}
-\AtBeginDocument{\shorthandoff{<>}}
-\usepackage{amsmath,amssymb,amsthm}
-\usepackage{mathtools}
-\usepackage{graphicx}
-\usepackage{xcolor}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.18}
-\usepackage{tcolorbox}
-\tcbuselibrary{breakable,skins}
-
-\newtcolorbox{pregunta}[1][]{
-  breakable,
-  colback=white,
-  colframe=black!35,
-  boxrule=0.6pt,
-  arc=1mm,
-  left=2mm,
-  right=2mm,
-  top=1.5mm,
-  bottom=1.5mm,
-  title={#1},
-  fonttitle=\bfseries
-}
-""".strip()
+    preview_preamble = _get_latex_preamble().strip()
+    cache_key_raw = f"{preview_preamble}\n---\n{fragmento}"
+    cache_key = hashlib.sha256(cache_key_raw.encode('utf-8')).hexdigest()
+    now = time.time()
+    cached = _latex_preview_cache.get(cache_key)
+    if cached:
+        cached_at, cached_pdf_b64, cached_png_b64 = cached
+        if (now - cached_at) <= LATEX_PREVIEW_CACHE_TTL_SECONDS:
+            return cached_pdf_b64, cached_png_b64, None
+        _latex_preview_cache.pop(cache_key, None)
 
     codigo_completo = (
         f"{preview_preamble}\n"
@@ -596,6 +640,7 @@ def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
                 encoding='utf-8',
                 errors='ignore',
                 timeout=timeout_seconds,
+                env=_build_compiler_env(),
             )
         except subprocess.TimeoutExpired as exc:
             timeout_output = '\n'.join(
@@ -679,6 +724,11 @@ def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
                 png_b64 = base64.b64encode(png_buffer.read()).decode('utf-8')
         except Exception:
             png_b64 = None
+
+        if len(_latex_preview_cache) >= LATEX_PREVIEW_CACHE_MAX_ITEMS:
+            oldest_key = next(iter(_latex_preview_cache.keys()))
+            _latex_preview_cache.pop(oldest_key, None)
+        _latex_preview_cache[cache_key] = (now, pdf_b64, png_b64)
 
         return pdf_b64, png_b64, None
 

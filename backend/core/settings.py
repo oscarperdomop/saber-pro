@@ -309,6 +309,7 @@ LATEX_PREAMBLE_INSTITUCIONAL = r"""
 \usepackage{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta}
+\usepackage{pgf-pie}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usepackage{tcolorbox}

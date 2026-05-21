@@ -1,10 +1,11 @@
-﻿import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import type { AxiosError } from "axios";
 import {
   ArrowRight,
   BarChart3,
   BookOpen,
   CheckCircle2,
+  Download,
   Eye,
   EyeOff,
   GraduationCap,
@@ -20,6 +21,10 @@ interface LoginErrorResponse {
   code?: string;
 }
 
+interface DeferredInstallPromptEvent extends Event {
+  prompt: () => Promise<{ outcome: "accepted" | "dismissed"; platform?: string }>;
+}
+
 const LoginPage = () => {
   const [correoInstitucional, setCorreoInstitucional] = useState("");
   const [password, setPassword] = useState("");
@@ -27,11 +32,22 @@ const LoginPage = () => {
   const [rememberSession, setRememberSession] = useState(true);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isInactiveAccountError, setIsInactiveAccountError] = useState(false);
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPromptEvent | null>(null);
+  const [canInstallApp, setCanInstallApp] = useState(false);
+  const [installHint, setInstallHint] = useState<string | null>(null);
 
   const loginMutation = useAuth();
   const isValidInstitutionalEmail = correoInstitucional
     .toLowerCase()
     .endsWith("@usco.edu.co");
+
+  const isStandaloneDisplayMode = () => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    const isIosStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+    return window.matchMedia("(display-mode: standalone)").matches || isIosStandalone;
+  };
 
   const resolveLoginError = (error: unknown) => {
     const axiosError = error as AxiosError<LoginErrorResponse>;
@@ -80,6 +96,62 @@ const LoginPage = () => {
         },
       },
     );
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (isStandaloneDisplayMode()) {
+      setCanInstallApp(false);
+      setInstallHint(null);
+      return;
+    }
+
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const isIOS = /iphone|ipad|ipod/.test(userAgent);
+    if (isIOS) {
+      setInstallHint("En iPhone/iPad: Compartir > Agregar a pantalla de inicio.");
+    }
+
+    const onBeforeInstallPrompt = (event: Event) => {
+      const installEvent = event as DeferredInstallPromptEvent;
+      event.preventDefault();
+      setDeferredInstallPrompt(installEvent);
+      setCanInstallApp(true);
+      setInstallHint(null);
+    };
+
+    const onAppInstalled = () => {
+      setDeferredInstallPrompt(null);
+      setCanInstallApp(false);
+      setInstallHint("Aplicacion instalada correctamente.");
+    };
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (deferredInstallPrompt) {
+      const result = await deferredInstallPrompt.prompt();
+      setDeferredInstallPrompt(null);
+      setCanInstallApp(false);
+      if (result.outcome !== "accepted") {
+        setInstallHint("Puedes instalarla mas tarde desde el menu del navegador.");
+      }
+      return;
+    }
+
+    if (!installHint) {
+      setInstallHint("Usa el boton de instalar del navegador (barra de direcciones).");
+    }
   };
 
   const features = [
@@ -317,6 +389,23 @@ const LoginPage = () => {
               <div className="mx-6 h-px bg-gradient-to-r from-transparent via-black/10 to-transparent" />
 
               <div className="px-6 py-5 text-center">
+                <div className="mb-3">
+                  <button
+                    type="button"
+                    onClick={handleInstallApp}
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#006633]/35 bg-[#006633]/10 px-4 text-[15px] font-semibold text-[#006633] transition hover:bg-[#006633]/15"
+                  >
+                    <Download className="h-4 w-4" />
+                    Instalar app
+                  </button>
+                  {(canInstallApp || installHint) && (
+                    <p className="mt-2 text-xs text-[#6b7280]">
+                      {canInstallApp
+                        ? "Disponible para instalar en este dispositivo."
+                        : installHint}
+                    </p>
+                  )}
+                </div>
                 <p className="mb-1 text-[13px] text-[#8e8e93]">
                   Problemas para ingresar?
                 </p>
@@ -460,6 +549,16 @@ const LoginPage = () => {
             </div>
 
             <p className="text-center text-sm text-usco-gris/90">
+              <span className="mr-2 inline-flex items-center">
+                <button
+                  type="button"
+                  onClick={handleInstallApp}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-usco-vino/30 bg-usco-vino/5 px-3 py-1.5 text-xs font-semibold text-usco-vino transition hover:bg-usco-vino/10"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Instalar app
+                </button>
+              </span>
               Problemas para ingresar?{" "}
               <button
                 type="button"
@@ -468,6 +567,13 @@ const LoginPage = () => {
                 Contacta soporte tecnico
               </button>
             </p>
+            {(canInstallApp || installHint) && (
+              <p className="mt-2 text-center text-xs text-usco-gris/80">
+                {canInstallApp
+                  ? "Disponible para instalar en este dispositivo."
+                  : installHint}
+              </p>
+            )}
           </div>
         </article>
       </section>

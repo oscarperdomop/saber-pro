@@ -56,6 +56,14 @@ pnpm-debug.log*
 *.swp
 
 # -----------------------------
+# DB backups
+# -----------------------------
+respaldo.sql
+respaldo_saberpro.sql
+respado_saberpro.sql
+backup_db/
+
+# -----------------------------
 # Local skills
 # -----------------------------
 skills/usco-react-frontend-architect/
