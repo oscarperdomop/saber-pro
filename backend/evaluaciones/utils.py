@@ -23,6 +23,7 @@ LATEX_PREAMBLE_DEFAULT = r"""
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{mathtools}
 \usepackage{graphicx}
+\usepackage{booktabs}
 \usepackage{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta}
@@ -326,6 +327,30 @@ def _normalize_pgf_pie_options(fragmento):
     return source
 
 
+def _normalize_tikz_legacy_arrow_style(fragmento):
+    """
+    Compatibilidad para snippets que usan \\draw[arrow] sin definir estilo arrow.
+    Convierte el token 'arrow' a la flecha nativa '->' en opciones de \\draw[...].
+    """
+    source = str(fragmento or '')
+
+    def _clean_draw_options(match):
+        options_raw = match.group(1) or ''
+        parts = options_raw.split(',')
+        normalized_parts = []
+        for part in parts:
+            token = part.strip()
+            if not token:
+                continue
+            if token == 'arrow':
+                normalized_parts.append('->')
+                continue
+            normalized_parts.append(token)
+        return r'\draw[' + ', '.join(normalized_parts) + ']'
+
+    return re.sub(r'\\draw\s*\[(.*?)\]', _clean_draw_options, source, flags=re.DOTALL)
+
+
 def limpiar_fragmento_latex(fragmento):
     # 1. Eliminar saltos de lÃ­nea dobles que LaTeX interpreta como \par (nuevo pÃ¡rrafo)
     # Reemplaza cualquier secuencia de 2 o mÃ¡s saltos de lÃ­nea por uno solo.
@@ -438,6 +463,7 @@ def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
     fragmento = limpiar_fragmento_latex(fragmento_codigo)
     fragmento = _normalize_tikz_arrow_compat(fragmento)
     fragmento = _normalize_pgf_pie_options(fragmento)
+    fragmento = _normalize_tikz_legacy_arrow_style(fragmento)
     if not fragmento:
         return None, 'No se recibio fragmento de codigo LaTeX.'
 
@@ -563,6 +589,7 @@ def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
     fragmento = limpiar_fragmento_latex(texto_latex)
     fragmento = _normalize_tikz_arrow_compat(fragmento)
     fragmento = _normalize_pgf_pie_options(fragmento)
+    fragmento = _normalize_tikz_legacy_arrow_style(fragmento)
     if not fragmento:
         return None, None, 'No se recibio texto LaTeX para previsualizar.'
 
