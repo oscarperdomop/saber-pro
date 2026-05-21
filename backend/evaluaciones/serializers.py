@@ -15,7 +15,7 @@ from .models import (
     ReglaExamen,
     RespuestaEstudiante,
 )
-from .utils import compilar_fragmento_latex, normalizar_texto
+from .utils import calcular_hash_md5_latex, compilar_fragmento_latex, normalizar_texto
 
 
 class OpcionRespuestaSerializer(serializers.ModelSerializer):
@@ -133,6 +133,25 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
                 {'codigo_latex': ['Debes escribir codigo LaTeX cuando el soporte es LATEX.']}
             )
 
+        try:
+            latex_md5, _fragmento_sanitizado = calcular_hash_md5_latex(fragmento)
+        except ValueError as exc:
+            raise serializers.ValidationError({'codigo_latex': [str(exc)]})
+
+        duplicado_latex = (
+            Pregunta.objects.exclude(pk=pregunta.pk)
+            .filter(codigo_latex_md5=latex_md5)
+            .exclude(imagen_grafica__isnull=True)
+            .exclude(imagen_grafica='')
+            .only('id', 'imagen_grafica')
+            .first()
+        )
+        if duplicado_latex and duplicado_latex.imagen_grafica:
+            pregunta.imagen_grafica = duplicado_latex.imagen_grafica
+            pregunta.codigo_latex_md5 = latex_md5
+            pregunta.save(update_fields=['imagen_grafica', 'codigo_latex_md5', 'updated_at'])
+            return
+
         image_file, error = compilar_fragmento_latex(
             fragmento_codigo=fragmento,
             nombre_archivo=f'pregunta_{pregunta.id}_grafica',
@@ -159,7 +178,8 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
 
         try:
             pregunta.imagen_grafica.save(image_file.name, image_file, save=False)
-            pregunta.save(update_fields=['imagen_grafica', 'updated_at'])
+            pregunta.codigo_latex_md5 = latex_md5
+            pregunta.save(update_fields=['imagen_grafica', 'codigo_latex_md5', 'updated_at'])
         except Exception as exc:
             raise serializers.ValidationError(
                 {
@@ -306,11 +326,14 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
             if soporte_multimedia == 'NINGUNO':
                 validated_data['imagen_grafica'] = None
                 validated_data['codigo_latex'] = None
+                validated_data['codigo_latex_md5'] = None
             elif soporte_multimedia == 'IMAGEN':
                 validated_data['codigo_latex'] = None
+                validated_data['codigo_latex_md5'] = None
             elif soporte_multimedia == 'LATEX':
                 # La imagen final se compila en servidor; no aceptamos subida manual en este modo.
                 validated_data['imagen_grafica'] = None
+                validated_data['codigo_latex_md5'] = None
 
             pregunta = Pregunta.objects.create(**validated_data)
 
@@ -339,10 +362,13 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
             if soporte_multimedia == 'NINGUNO':
                 instance.imagen_grafica = None
                 instance.codigo_latex = None
+                instance.codigo_latex_md5 = None
             elif soporte_multimedia == 'IMAGEN':
                 instance.codigo_latex = None
+                instance.codigo_latex_md5 = None
             elif soporte_multimedia == 'LATEX':
                 instance.imagen_grafica = None
+                instance.codigo_latex_md5 = None
 
             if tipo_pregunta == 'Ensayo':
                 if instance.limite_palabras in [None, '']:
