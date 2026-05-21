@@ -10,6 +10,7 @@ from .views import (
     GenerarOpcionesIAView,
     IntentoExamenViewSet,
     LaTeXPreviewView,
+    LaTeXWarmupView,
     ModuloAdminViewSet,
     PlantillaExamenAdminViewSet,
     PreguntaAdminViewSet,
@@ -34,6 +35,7 @@ router.register(r'admin/reportes', ReportesViewSet, basename='admin-reportes')
 urlpatterns = [
     path('ia/generar-opciones/', GenerarOpcionesIAView.as_view(), name='ia-generar-opciones'),
     path('ia/preview-latex/', LaTeXPreviewView.as_view(), name='ia-preview-latex'),
+    path('ia/warmup-latex/', LaTeXWarmupView.as_view(), name='ia-warmup-latex'),
     path(
         'admin/simulacros/dashboard-stats/',
         SimulacrosDashboardStatsView.as_view(),
