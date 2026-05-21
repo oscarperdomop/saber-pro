@@ -306,6 +306,7 @@ LATEX_PREAMBLE_INSTITUCIONAL = r"""
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{mathtools}
 \usepackage{graphicx}
+\usepackage{booktabs}
 \usepackage{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta}
