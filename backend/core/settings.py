@@ -305,11 +305,13 @@ LATEX_PREAMBLE_INSTITUCIONAL = r"""
 \AtBeginDocument{\shorthandoff{<>}}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{mathtools}
+\usepackage{enumitem}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta}
+\tikzset{arrow/.style={->,>=stealth}}
 \usepackage{pgf-pie}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}

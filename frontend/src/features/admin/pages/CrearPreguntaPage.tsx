@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import especificacionesService from '../services/especificacionesService'
 import preguntasService from '../services/preguntasService'
@@ -27,6 +27,7 @@ interface OpcionForm {
 
 const CrearPreguntaPage = () => {
   const navigate = useNavigate()
+  const latexWarmupRequestedRef = useRef(false)
 
   const [moduloId, setModuloId] = useState<number | ''>('')
   const [categoriaId, setCategoriaId] = useState<number | ''>('')
@@ -77,6 +78,17 @@ const CrearPreguntaPage = () => {
       setModuloId(Number(modulos[0].id))
     }
   }, [modulos, moduloId])
+
+  useEffect(() => {
+    if (latexWarmupRequestedRef.current) {
+      return
+    }
+
+    latexWarmupRequestedRef.current = true
+    void preguntasService.precalentarCompiladorLatex().catch(() => {
+      // Warm-up best-effort: no interrumpe flujo del formulario.
+    })
+  }, [])
 
   useEffect(() => {
     setCategoriaId('')
@@ -820,9 +832,16 @@ const CrearPreguntaPage = () => {
         <button
           type="submit"
           disabled={crearPreguntaMutation.isPending}
-          className="w-full rounded-xl bg-usco-vino p-3 text-base font-semibold text-white shadow transition hover:bg-[#741017] disabled:cursor-not-allowed disabled:opacity-70"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-usco-vino p-3 text-base font-semibold text-white shadow transition hover:bg-[#741017] disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {crearPreguntaMutation.isPending ? 'Guardando...' : 'Guardar Pregunta'}
+          {crearPreguntaMutation.isPending ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Guardando...
+            </>
+          ) : (
+            'Guardar Pregunta'
+          )}
         </button>
       </form>
     </section>

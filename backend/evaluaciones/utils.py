@@ -22,11 +22,13 @@ LATEX_PREAMBLE_DEFAULT = r"""
 \AtBeginDocument{\shorthandoff{<>}}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{mathtools}
+\usepackage{enumitem}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta}
+\tikzset{arrow/.style={->,>=stealth}}
 \usepackage{pgf-pie}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
@@ -53,6 +55,36 @@ LATEX_DOCUMENT_WRAPPER_DEFAULT = r"\begin{document}\newpage{}\end{document}"
 LATEX_PREVIEW_CACHE_TTL_SECONDS = 300
 LATEX_PREVIEW_CACHE_MAX_ITEMS = 64
 _latex_preview_cache = {}
+
+
+def _build_preview_cache_key(fragmento):
+    preview_preamble = _get_latex_preamble().strip()
+    cache_key_raw = f"{preview_preamble}\n---\n{str(fragmento or '')}"
+    return hashlib.sha256(cache_key_raw.encode('utf-8')).hexdigest()
+
+
+def _get_cached_preview_png_bytes(fragmento):
+    """
+    Reutiliza la imagen PNG de preview si existe y sigue vigente.
+    Esto evita recompilar en guardado cuando el usuario ya previsualizo el mismo snippet.
+    """
+    cache_key = _build_preview_cache_key(fragmento)
+    cached = _latex_preview_cache.get(cache_key)
+    if not cached:
+        return None
+
+    cached_at, _cached_pdf_b64, cached_png_b64 = cached
+    if (time.time() - cached_at) > LATEX_PREVIEW_CACHE_TTL_SECONDS:
+        _latex_preview_cache.pop(cache_key, None)
+        return None
+
+    if not cached_png_b64:
+        return None
+
+    try:
+        return base64.b64decode(cached_png_b64)
+    except Exception:
+        return None
 
 
 def normalizar_texto(value):
@@ -351,6 +383,89 @@ def _normalize_tikz_legacy_arrow_style(fragmento):
     return re.sub(r'\\draw\s*\[(.*?)\]', _clean_draw_options, source, flags=re.DOTALL)
 
 
+def _detect_incomplete_latex_fragment(fragmento):
+    """
+    Detecta fragmentos incompletos antes de compilar para devolver un mensaje claro al usuario.
+    """
+    text = str(fragmento or '')
+    if not text.strip():
+        return 'No se recibio texto LaTeX para compilar.'
+
+    begin_pregunta = bool(re.search(r'\\begin\s*\{\s*pregunta\s*\}', text))
+    end_pregunta = bool(re.search(r'\\end\s*\{\s*pregunta\s*\}', text))
+    if end_pregunta and not begin_pregunta:
+        return (
+            'Codigo LaTeX incompleto o invalido: se detecto \\end{pregunta} sin apertura. '
+            'No incluyas \\begin{pregunta} ni \\end{pregunta}; pega solo el contenido interno.'
+        )
+
+    env_pattern = re.compile(r'\\(begin|end)\s*\{([^\}]+)\}')
+    stack = []
+    mismatch = None
+    for match in env_pattern.finditer(text):
+        kind = match.group(1)
+        env_name = str(match.group(2) or '').strip()
+        if not env_name:
+            continue
+        if kind == 'begin':
+            stack.append(env_name)
+            continue
+        if stack and stack[-1] == env_name:
+            stack.pop()
+        else:
+            mismatch = env_name
+            break
+
+    if mismatch:
+        return (
+            'Codigo LaTeX incompleto o desbalanceado: hay cierres de entorno fuera de orden '
+            f'(ejemplo detectado: \\end{{{mismatch}}}).'
+        )
+
+    if stack:
+        pendientes = ', '.join(f'\\end{{{env}}}' for env in stack[-3:])
+        return (
+            'Codigo LaTeX incompleto: faltan cierres de entorno. '
+            f'Revisa especialmente: {pendientes}.'
+        )
+
+    # Verificacion ligera de llaves para detectar bloques cortados en mitad.
+    open_braces = text.count('{') - text.count(r'\{')
+    close_braces = text.count('}') - text.count(r'\}')
+    if open_braces != close_braces:
+        return (
+            'Codigo LaTeX incompleto: las llaves no estan balanceadas. '
+            'Verifica que cada "{" tenga su "}".'
+        )
+
+    return None
+
+
+def _append_latex_compiler_hint(output_text, fragmento):
+    """
+    Enriquece errores tecnicos comunes con una sugerencia accionable para usuario final.
+    """
+    output = str(output_text or '').strip()
+    if not output:
+        return output
+
+    lower_output = output.lower()
+    lower_fragment = str(fragmento or '').lower()
+
+    if 'missing number, treated as zero' in lower_output:
+        uses_enum_label = (
+            r'\begin{enumerate}[' in lower_fragment
+            and 'label=' in lower_fragment
+            and ('\\alph*' in lower_fragment or '\\alph*)' in lower_fragment)
+        )
+        if uses_enum_label:
+            output += (
+                '\nSugerencia: el formato de lista `label=...` requiere soporte de enumitem. '
+                'Si pegaste \\end{pregunta}, retiralo y vuelve a intentar solo con el fragmento.'
+            )
+    return output
+
+
 def limpiar_fragmento_latex(fragmento):
     # 1. Eliminar saltos de lÃ­nea dobles que LaTeX interpreta como \par (nuevo pÃ¡rrafo)
     # Reemplaza cualquier secuencia de 2 o mÃ¡s saltos de lÃ­nea por uno solo.
@@ -464,8 +579,16 @@ def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
     fragmento = _normalize_tikz_arrow_compat(fragmento)
     fragmento = _normalize_pgf_pie_options(fragmento)
     fragmento = _normalize_tikz_legacy_arrow_style(fragmento)
+    incomplete_error = _detect_incomplete_latex_fragment(fragmento)
+    if incomplete_error:
+        return None, incomplete_error
     if not fragmento:
         return None, 'No se recibio fragmento de codigo LaTeX.'
+
+    cached_png_bytes = _get_cached_preview_png_bytes(fragmento)
+    if cached_png_bytes:
+        file_name = f"{str(nombre_archivo or 'pregunta_latex').strip()}.png"
+        return ContentFile(cached_png_bytes, name=file_name), None
 
     preamble = _get_latex_preamble()
     wrapper = _get_latex_wrapper()
@@ -550,6 +673,7 @@ def compilar_fragmento_latex(fragmento_codigo, nombre_archivo):
                 ]
             ).strip()
             output = output[-1200:] if output else 'Error desconocido de compilacion.'
+            output = _append_latex_compiler_hint(output, fragmento)
             if 'pgfplots@@environment@axis was complete' in output:
                 output += (
                     "\nSugerencia: revisa que el bloque \\begin{axis}[...] cierre correctamente con "
@@ -590,6 +714,9 @@ def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
     fragmento = _normalize_tikz_arrow_compat(fragmento)
     fragmento = _normalize_pgf_pie_options(fragmento)
     fragmento = _normalize_tikz_legacy_arrow_style(fragmento)
+    incomplete_error = _detect_incomplete_latex_fragment(fragmento)
+    if incomplete_error:
+        return None, None, incomplete_error
     if not fragmento:
         return None, None, 'No se recibio texto LaTeX para previsualizar.'
 
@@ -602,8 +729,7 @@ def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
         )
 
     preview_preamble = _get_latex_preamble().strip()
-    cache_key_raw = f"{preview_preamble}\n---\n{fragmento}"
-    cache_key = hashlib.sha256(cache_key_raw.encode('utf-8')).hexdigest()
+    cache_key = _build_preview_cache_key(fragmento)
     now = time.time()
     cached = _latex_preview_cache.get(cache_key)
     if cached:
@@ -699,6 +825,7 @@ def compilar_preview_latex_base64(texto_latex, timeout_seconds=12):
             ).strip()
             output = _sanitize_compiler_output(output)
             output = output[-2000:] if output else 'Error desconocido de compilacion.'
+            output = _append_latex_compiler_hint(output, fragmento)
             return None, None, f'Error de compilacion LaTeX: {output}'
 
         pdf_path = os.path.join(temp_dir, 'input.pdf')

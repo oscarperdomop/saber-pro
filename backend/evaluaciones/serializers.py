@@ -139,11 +139,20 @@ class PreguntaAdminSerializer(serializers.ModelSerializer):
         )
 
         if not image_file:
+            error_text = str(error or '')
+            es_incompleto = error_text.lower().startswith('codigo latex incompleto')
+            mensaje_usuario = (
+                error_text
+                if es_incompleto
+                else (
+                    'No fue posible compilar el codigo LaTeX. '
+                    f'Detalle tecnico: {error_text}'
+                )
+            )
             raise serializers.ValidationError(
                 {
                     'codigo_latex': [
-                        'No fue posible compilar el codigo LaTeX. '
-                        f'Detalle tecnico: {error}'
+                        mensaje_usuario
                     ]
                 }
             )

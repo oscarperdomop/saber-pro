@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import especificacionesService from '../services/especificacionesService'
 import preguntasService from '../services/preguntasService'
@@ -90,6 +90,7 @@ const EditarPreguntaPage = () => {
   const location = useLocation()
   const queryClient = useQueryClient()
   const { preguntaId } = useParams()
+  const latexWarmupRequestedRef = useRef(false)
   const backendOrigin = useMemo(() => getBackendOrigin(), [])
   const locationState = (location.state as EditarPreguntaLocationState | null) ?? null
   const fromCarousel = Boolean(locationState?.fromCarousel)
@@ -243,6 +244,17 @@ const EditarPreguntaPage = () => {
 
     setInitialized(true)
   }, [pregunta, initialized])
+
+  useEffect(() => {
+    if (latexWarmupRequestedRef.current) {
+      return
+    }
+
+    latexWarmupRequestedRef.current = true
+    void preguntasService.precalentarCompiladorLatex().catch(() => {
+      // Warm-up best-effort: no interrumpe flujo del formulario.
+    })
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -1109,9 +1121,16 @@ const EditarPreguntaPage = () => {
         <button
           type="submit"
           disabled={editarPreguntaMutation.isPending}
-          className="w-full rounded-xl bg-usco-vino p-3 text-base font-semibold text-white shadow transition hover:bg-[#741017] disabled:cursor-not-allowed disabled:opacity-70"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-usco-vino p-3 text-base font-semibold text-white shadow transition hover:bg-[#741017] disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {editarPreguntaMutation.isPending ? 'Guardando...' : 'Guardar Cambios'}
+          {editarPreguntaMutation.isPending ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Guardando...
+            </>
+          ) : (
+            'Guardar Cambios'
+          )}
         </button>
       </form>
     </section>

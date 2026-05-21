@@ -340,12 +340,21 @@ class LaTeXPreviewView(APIView):
         )
 
         if compile_error:
+            error_text = str(compile_error or '')
+            es_incompleto = error_text.lower().startswith('codigo latex incompleto')
+            detalle_usuario = (
+                error_text
+                if es_incompleto
+                else 'No fue posible compilar el codigo LaTeX.'
+            )
+            payload = {
+                'status': 'error',
+                'detalle': detalle_usuario,
+            }
+            if not es_incompleto:
+                payload['detalle_tecnico'] = error_text
             return Response(
-                {
-                    'status': 'error',
-                    'detalle': 'No fue posible compilar el codigo LaTeX.',
-                    'detalle_tecnico': compile_error,
-                },
+                payload,
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
