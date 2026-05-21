@@ -74,12 +74,6 @@ const CrearPreguntaPage = () => {
   })
 
   useEffect(() => {
-    if (moduloId === '' && modulos && modulos.length > 0) {
-      setModuloId(Number(modulos[0].id))
-    }
-  }, [modulos, moduloId])
-
-  useEffect(() => {
     if (latexWarmupRequestedRef.current) {
       return
     }

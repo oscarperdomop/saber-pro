@@ -17,7 +17,7 @@ import {
   Users2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import CargaMasivaPreguntasModal from '../components/CargaMasivaPreguntasModal'
 import VisualizarPreguntaModal from '../components/VisualizarPreguntaModal'
 import preguntasService, {
@@ -788,16 +788,40 @@ const BancoPreguntasPage = () => {
             {preguntasRecientes.map((pregunta) => {
               const modulo = getModuloNombre(pregunta)
               const dificultad = getDificultadLabel(pregunta.dificultad)
+              const startIndex = preguntasFiltradas.findIndex((item) => String(item.id) === String(pregunta.id))
+              const carruselState =
+                startIndex >= 0
+                  ? {
+                      preguntasList: preguntasFiltradas,
+                      startIndex,
+                    }
+                  : null
 
               return (
                 <article key={String(pregunta.id)} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <div className="line-clamp-2 text-sm font-medium text-usco-gris" title={pregunta.enunciado}>
-                      <RichTextRenderer
-                        content={pregunta.enunciado}
-                        className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:m-0"
-                      />
-                    </div>
+                    {carruselState ? (
+                      <Link
+                        to="/preguntas/carousel"
+                        state={carruselState}
+                        className="block cursor-pointer text-sm font-medium text-usco-gris no-underline transition hover:text-red-800 hover:underline"
+                        title={pregunta.enunciado}
+                      >
+                        <div className="line-clamp-2">
+                          <RichTextRenderer
+                            content={pregunta.enunciado}
+                            className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:m-0"
+                          />
+                        </div>
+                      </Link>
+                    ) : (
+                      <div className="line-clamp-2 text-sm font-medium text-usco-gris" title={pregunta.enunciado}>
+                        <RichTextRenderer
+                          content={pregunta.enunciado}
+                          className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:m-0"
+                        />
+                      </div>
+                    )}
                     <div className="mt-1 flex flex-wrap items-center gap-2">
 	                    <span className="text-xs text-usco-gris/80">{modulo}</span>
                       <span
