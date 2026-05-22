@@ -258,6 +258,41 @@ const PreguntaCarouselView = () => {
         </div>
 
         <h1 className="text-2xl font-bold text-usco-vino">Vista Carrusel de Preguntas</h1>
+
+        <div className="rounded-2xl border border-usco-ocre/80 bg-white p-4 shadow-sm">
+          <div className="mb-3 h-2 w-full overflow-hidden rounded-full bg-usco-fondo">
+            <div
+              className="h-full rounded-full bg-usco-vino transition-all"
+              style={{ width: `${((currentIndex + 1) / preguntas.length) * 100}%` }}
+            />
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <button
+              type="button"
+              onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+              disabled={!puedeRetroceder}
+              className="inline-flex items-center justify-center gap-1 rounded-xl border border-usco-gris/30 px-4 py-2 text-sm font-semibold text-usco-gris transition hover:border-usco-vino hover:text-usco-vino disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </button>
+
+            <p className="text-center text-sm font-semibold text-usco-gris">
+              Pregunta {currentIndex + 1} de {preguntas.length}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setCurrentIndex((prev) => Math.min(preguntas.length - 1, prev + 1))}
+              disabled={!puedeAvanzar}
+              className="inline-flex items-center justify-center gap-1 rounded-xl bg-usco-vino px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#741017] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Siguiente
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       </header>
 
       <section className="rounded-2xl border border-usco-ocre/80 bg-white p-5 shadow-sm">
@@ -368,40 +403,6 @@ const PreguntaCarouselView = () => {
         )}
       </section>
 
-      <footer className="rounded-2xl border border-usco-ocre/80 bg-white p-4 shadow-sm">
-        <div className="mb-3 h-2 w-full overflow-hidden rounded-full bg-usco-fondo">
-          <div
-            className="h-full rounded-full bg-usco-vino transition-all"
-            style={{ width: `${((currentIndex + 1) / preguntas.length) * 100}%` }}
-          />
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            type="button"
-            onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-            disabled={!puedeRetroceder}
-            className="inline-flex items-center justify-center gap-1 rounded-xl border border-usco-gris/30 px-4 py-2 text-sm font-semibold text-usco-gris transition hover:border-usco-vino hover:text-usco-vino disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Anterior
-          </button>
-
-          <p className="text-center text-sm font-semibold text-usco-gris">
-            Pregunta {currentIndex + 1} de {preguntas.length}
-          </p>
-
-          <button
-            type="button"
-            onClick={() => setCurrentIndex((prev) => Math.min(preguntas.length - 1, prev + 1))}
-            disabled={!puedeAvanzar}
-            className="inline-flex items-center justify-center gap-1 rounded-xl bg-usco-vino px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#741017] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Siguiente
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      </footer>
     </section>
   )
 }

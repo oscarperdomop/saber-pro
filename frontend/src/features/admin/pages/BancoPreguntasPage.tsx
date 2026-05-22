@@ -355,6 +355,9 @@ const BancoPreguntasPage = () => {
 
     if (state?.successMessage) {
       setSuccessMessage(state.successMessage)
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
       navigate(location.pathname, { replace: true })
     }
   }, [location.pathname, location.state, navigate])

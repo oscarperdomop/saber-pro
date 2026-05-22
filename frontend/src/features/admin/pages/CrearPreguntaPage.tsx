@@ -256,7 +256,7 @@ const CrearPreguntaPage = () => {
 
   const validarFormulario = (): string | null => {
     if (moduloId === '') {
-      return 'Debes seleccionar un mÃ³dulo.'
+      return 'Debes seleccionar un módulo.'
     }
 
     if (!enunciado.trim()) {
@@ -264,7 +264,7 @@ const CrearPreguntaPage = () => {
     }
 
     if (categoriaId === '') {
-      return 'Debes seleccionar una categorÃ­a.'
+      return 'Debes seleccionar una categoría.'
     }
 
     if (competenciaId === '') {
@@ -272,15 +272,15 @@ const CrearPreguntaPage = () => {
     }
 
     if (tipoPregunta === 'Ensayo' && (!limitePalabras || limitePalabras <= 0)) {
-      return 'El limite de palabras debe ser mayor a 0.'
+      return 'El límite de palabras debe ser mayor a 0.'
     }
 
     if (soporteMultimedia === 'IMAGEN' && !(imagenGrafica instanceof File)) {
-      return 'Debes cargar una imagen grafica cuando el soporte multimedia es IMAGEN.'
+      return 'Debes cargar una imagen gráfica cuando el soporte multimedia es IMAGEN.'
     }
 
     if (soporteMultimedia === 'LATEX' && !codigoLatex.trim()) {
-      return 'Debes escribir codigo LaTeX cuando el soporte multimedia es LATEX.'
+      return 'Debes escribir código LaTeX cuando el soporte multimedia es LATEX.'
     }
 
     if (tipoPregunta === 'Opcion Multiple') {
@@ -297,7 +297,7 @@ const CrearPreguntaPage = () => {
       }
 
       if (!opcionesValidas.some((opcion) => opcion.es_correcta)) {
-        return 'Debes marcar una opcion correcta.'
+        return 'Debes marcar una opción correcta.'
       }
 
       if (formatoOpciones === 'texto') {
@@ -332,7 +332,7 @@ const CrearPreguntaPage = () => {
       })
 
       if (!opcionesIA.length) {
-        setFormError('La IA no devolvio opciones. Intenta nuevamente.')
+        setFormError('La IA no devolvió opciones. Intenta nuevamente.')
         return
       }
 
@@ -347,7 +347,7 @@ const CrearPreguntaPage = () => {
         }))
 
       if (!opcionesLimpias.length) {
-        setFormError('La IA devolvio opciones vacias. Intenta nuevamente.')
+        setFormError('La IA devolvió opciones vacías. Intenta nuevamente.')
         return
       }
 
@@ -448,7 +448,7 @@ const CrearPreguntaPage = () => {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <section className="space-y-4 rounded-2xl border border-usco-ocre/80 bg-white p-5 shadow-sm">
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-usco-gris">MÃ³dulo</span>
+              <span className="mb-1 block text-sm font-semibold text-usco-gris">Módulo</span>
               <select
                 value={moduloId}
                 onChange={(event) => setModuloId(Number(event.target.value))}
@@ -457,10 +457,10 @@ const CrearPreguntaPage = () => {
                 required
               >
                 {cargandoModulos ? (
-                  <option value="">Cargando mÃ³dulos...</option>
+                  <option value="">Cargando módulos...</option>
                 ) : (
                   <>
-                    <option value="">Selecciona un mÃ³dulo</option>
+                    <option value="">Selecciona un módulo</option>
                     {(modulos ?? []).map((modulo) => (
                       <option key={modulo.id} value={modulo.id}>
                         {modulo.nombre}
@@ -473,7 +473,7 @@ const CrearPreguntaPage = () => {
 
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-usco-gris">
-                CategorÃ­a o Contenido
+                Categoría o Contenido
               </span>
               <select
                 value={categoriaId}
@@ -482,7 +482,7 @@ const CrearPreguntaPage = () => {
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15 disabled:bg-gray-100"
               >
                 <option value="" disabled>
-                  -- Selecciona una categorÃ­a --
+                  -- Selecciona una categoría --
                 </option>
                 {categorias?.map((categoria) => (
                   <option key={categoria.id} value={categoria.id}>
@@ -523,7 +523,7 @@ const CrearPreguntaPage = () => {
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               >
-                <option value="Opcion Multiple">Opcion Multiple</option>
+                <option value="Opcion Multiple">Opción múltiple</option>
                 <option value="Ensayo">Ensayo</option>
               </select>
             </label>
@@ -536,7 +536,7 @@ const CrearPreguntaPage = () => {
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                 required
               >
-                <option value="Facil">Facil</option>
+                <option value="Facil">Fácil</option>
                 <option value="Media">Media</option>
                 <option value="Alta">Alta</option>
               </select>
@@ -551,8 +551,8 @@ const CrearPreguntaPage = () => {
                 onChange={(event) => setEstado(event.target.value as 'Borrador' | 'Publicada')}
                 className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
               >
-                <option value="Borrador">âœŽ Borrador (No saldra en examenes)</option>
-                <option value="Publicada">âœ“ Publicada (Lista para usar)</option>
+                <option value="Borrador">Borrador (No saldrá en exámenes)</option>
+                <option value="Publicada">Publicada (Lista para usar)</option>
               </select>
             </label>
 
@@ -611,7 +611,7 @@ const CrearPreguntaPage = () => {
                   {imagenGraficaPreview && (
                     <img
                       src={imagenGraficaPreview}
-                      alt="Vista previa de grafica"
+                      alt="Vista previa de gráfica"
                       className="max-h-52 w-full rounded border border-gray-200 bg-white object-contain"
                     />
                   )}
@@ -621,7 +621,7 @@ const CrearPreguntaPage = () => {
               {soporteMultimedia === 'LATEX' && (
                 <div className="mt-3 space-y-2">
                   <p className="rounded-lg border border-usco-ocre/70 bg-white p-2 text-xs text-usco-gris">
-                    Pega unicamente el fragmento de codigo de la grafica o pregunta (por ejemplo:
+                    Pega únicamente el fragmento de código de la gráfica o pregunta (por ejemplo:
                     <span className="font-semibold"> \begin{'{'}tikzpicture{'}'}...\end{'{'}tikzpicture{'}'} </span>
                     o <span className="font-semibold">\begin{'{'}pregunta{'}'}...\end{'{'}pregunta{'}'}</span>).
                     No incluyas <span className="font-semibold">\documentclass</span> ni
@@ -676,7 +676,7 @@ const CrearPreguntaPage = () => {
             {tipoPregunta === 'Ensayo' ? (
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-usco-gris">
-                  Limite de Palabras
+                  Límite de palabras
                 </span>
                 <input
                   type="number"
@@ -744,11 +744,11 @@ const CrearPreguntaPage = () => {
                           value={opcion.texto}
                           onChange={(event) => actualizarTextoOpcion(index, event.target.value)}
                           className="min-h-[80px] w-full resize-y rounded border border-gray-300 p-2 text-sm text-usco-gris focus:border-usco-vino focus:ring-usco-vino"
-                          placeholder={`Texto de la opcion ${index + 1}`}
+                          placeholder={`Texto de la opción ${index + 1}`}
                         />
                         <KaTeXPreview
                           text={opcion.texto}
-                          label={`Vista previa opcion ${index + 1}`}
+                          label={`Vista previa opción ${index + 1}`}
                           className="bg-white"
                         />
                       </div>
@@ -765,7 +765,7 @@ const CrearPreguntaPage = () => {
                         {opcion.previewUrl && (
                           <img
                             src={opcion.previewUrl}
-                            alt={`Preview opcion ${index + 1}`}
+                            alt={`Vista previa opción ${index + 1}`}
                             className="h-28 w-full rounded border border-gray-200 object-contain bg-gray-50"
                           />
                         )}
@@ -789,8 +789,8 @@ const CrearPreguntaPage = () => {
                         onClick={() => eliminarOpcion(index)}
                         disabled={opciones.length <= 2}
                         className="p-1 text-red-400 transition-colors hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-                        title="Eliminar opcion"
-                        aria-label="Eliminar opcion"
+                        title="Eliminar opción"
+                        aria-label="Eliminar opción"
                       >
                         <Trash2 size={18} />
                       </button>
@@ -804,7 +804,7 @@ const CrearPreguntaPage = () => {
                   className="inline-flex items-center gap-2 rounded-xl border border-usco-vino/40 px-3 py-2 text-sm font-semibold text-usco-vino transition hover:bg-usco-vino/5"
                 >
                   <Plus className="h-4 w-4" />
-                  Anadir Opcion
+                  Añadir opción
                 </button>
               </div>
             )}

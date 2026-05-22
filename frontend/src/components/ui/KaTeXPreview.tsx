@@ -19,8 +19,8 @@ const KaTeXPreview = ({ text, label = 'Vista previa', className = '' }: KaTeXPre
         hasAdvancedLatex ? (
           <div className="space-y-2">
             <p className="rounded border border-usco-ocre/80 bg-white p-2 text-xs text-usco-gris">
-              Este fragmento usa entornos LaTeX avanzados (por ejemplo TikZ o pregunta). La vista
-              previa web solo valida formulas KaTeX; el render final se genera en el backend al
+              Este fragmento usa entornos LaTeX avanzados (por ejemplo, TikZ o pregunta). La vista
+              previa web solo valida fórmulas KaTeX; el render final se genera en el backend al
               guardar la pregunta.
             </p>
             <pre className="max-h-44 overflow-auto rounded border border-gray-200 bg-white p-2 text-xs text-usco-gris">
@@ -35,7 +35,7 @@ const KaTeXPreview = ({ text, label = 'Vista previa', className = '' }: KaTeXPre
         )
       ) : (
         <p className="text-xs text-usco-gris/70">
-          Escribe contenido para validar el render matematico.
+          Escribe contenido para validar el render matemático.
         </p>
       )}
     </div>
