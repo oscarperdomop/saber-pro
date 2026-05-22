@@ -260,6 +260,11 @@ class RespuestaEstudiante(models.Model):
         on_delete=models.SET_NULL,
     )
     texto_respuesta_abierta = models.TextField(null=True, blank=True)
+    retroalimentacion_ia = models.TextField(
+        null=True,
+        blank=True,
+        help_text='Explicacion pedagogica generada por IA para respuestas incorrectas.',
+    )
     marcada_para_revision = models.BooleanField(default=False)
     puntaje_calificado = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     evaluador = models.ForeignKey(

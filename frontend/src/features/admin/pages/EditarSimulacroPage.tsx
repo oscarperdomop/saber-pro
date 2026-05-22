@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -350,13 +350,13 @@ const EditarSimulacroPage = () => {
     }
 
     if (reglas.length === 0) {
-      window.alert('Debes agregar al menos un módulo.')
+      window.alert('Debes agregar al menos un mÃ³dulo.')
       return
     }
 
     const hayModulosSinSeleccionar = reglas.some((regla) => regla.modulo_id === '')
     if (hayModulosSinSeleccionar) {
-      window.alert('Todas las reglas deben tener un módulo seleccionado.')
+      window.alert('Todas las reglas deben tener un mÃ³dulo seleccionado.')
       return
     }
 
@@ -364,7 +364,7 @@ const EditarSimulacroPage = () => {
       (regla) => regla.cantidad_facil + regla.cantidad_media + regla.cantidad_alta === 0,
     )
     if (reglaConTotalCero) {
-      window.alert('Cada módulo debe tener al menos una pregunta en total.')
+      window.alert('Cada mÃ³dulo debe tener al menos una pregunta en total.')
       return
     }
 
@@ -602,7 +602,7 @@ const EditarSimulacroPage = () => {
 
           {isLoadingModulos && (
             <p className="rounded-xl border border-usco-ocre/70 bg-white p-3 text-sm text-usco-gris">
-              Cargando módulos...
+              Cargando mÃ³dulos...
             </p>
           )}
 
@@ -610,13 +610,26 @@ const EditarSimulacroPage = () => {
             <p className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
               {modulosError.response?.data?.detail ??
                 modulosError.response?.data?.detalle ??
-                'No fue posible cargar los módulos.'}
+                'No fue posible cargar los mÃ³dulos.'}
             </p>
+          )}
+
+
+
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={agregarRegla}
+              disabled={isLoadingModulos || isErrorModulos || modulos.length === 0}
+              className="rounded-xl border border-usco-vino px-4 py-2 text-sm font-semibold text-usco-vino transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              + Agregar MÃ³dulo al Examen
+            </button>
           )}
 
           {!isLoadingModulos && !isErrorModulos && reglas.length === 0 && (
             <p className="rounded-xl border border-usco-ocre/70 bg-usco-fondo/60 p-3 text-sm text-usco-gris">
-              Aún no has agregado módulos para este simulacro.
+              AÃºn no has agregado mÃ³dulos para este simulacro.
             </p>
           )}
 
@@ -628,14 +641,14 @@ const EditarSimulacroPage = () => {
                 <div key={`${String(regla.modulo_id)}-${index}`} className="rounded-lg border border-usco-ocre/70 bg-white p-3 shadow-sm">
                   <div className="flex flex-col gap-3 md:flex-row md:items-end">
                     <label className="block flex-1">
-                      <span className="mb-1 block text-sm font-semibold text-usco-gris">Módulo</span>
+                      <span className="mb-1 block text-sm font-semibold text-usco-gris">MÃ³dulo</span>
                       <select
                         value={regla.modulo_id === '' ? '' : String(regla.modulo_id)}
                         onChange={(event) => actualizarRegla(index, 'modulo_id', event.target.value)}
                         disabled={isReadOnly}
                         className="w-full rounded-xl border border-usco-ocre/80 px-3 py-2 text-sm text-usco-gris outline-none transition focus:border-usco-vino focus:ring-2 focus:ring-usco-vino/15"
                       >
-                        <option value="">Selecciona un módulo</option>
+                        <option value="">Selecciona un mÃ³dulo</option>
                         {modulos.map((modulo) => (
                           <option key={modulo.id} value={modulo.id}>
                             {modulo.nombre}
@@ -744,17 +757,6 @@ const EditarSimulacroPage = () => {
               )
             })}
           </div>
-
-          {!isReadOnly && (
-            <button
-              type="button"
-              onClick={agregarRegla}
-              disabled={isLoadingModulos || isErrorModulos || modulos.length === 0}
-              className="rounded-xl border border-usco-vino px-4 py-2 text-sm font-semibold text-usco-vino transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              + Agregar Módulo al Examen
-            </button>
-          )}
         </section>
 
         {formError && (
@@ -778,3 +780,4 @@ const EditarSimulacroPage = () => {
 }
 
 export default EditarSimulacroPage
+

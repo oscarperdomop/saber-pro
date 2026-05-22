@@ -62,9 +62,13 @@ const getResumenResultados = async (intentoId: string): Promise<ResumenResultado
   return data
 }
 
-const generarPlanEstudioIA = async (intentoId: string): Promise<{ plan: string }> => {
+const generarPlanEstudioIA = async (
+  intentoId: string,
+  options?: { forzar?: boolean },
+): Promise<{ plan: string }> => {
   const { data } = await axiosInstance.post<{ plan: string }>(
     `/evaluaciones/estudiante/mis-intentos/${intentoId}/generar_plan_estudio/`,
+    { forzar: Boolean(options?.forzar) },
   )
   return data
 }

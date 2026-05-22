@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from '../components/layout/ProtectedRoute'
 import RoleRoute from '../components/layout/RoleRoute'
+import PageErrorBoundary from '../components/ui/PageErrorBoundary'
 
 const MainLayout = lazy(() => import('../components/layout/MainLayout'))
 const BancoPreguntasPage = lazy(() => import('../features/admin/pages/BancoPreguntasPage'))
@@ -92,7 +93,11 @@ const AppRouter = () => {
                 <Route path="/evaluaciones/intento/:intentoId" element={<ModulosIntentoPage />} />
                 <Route
                   path="/evaluaciones/intento/:intentoId/resultados"
-                  element={<ResultadosExamenPage />}
+                  element={
+                    <PageErrorBoundary title="Se detectó un error al cargar los resultados del intento.">
+                      <ResultadosExamenPage />
+                    </PageErrorBoundary>
+                  }
                 />
               </Route>
             </Route>

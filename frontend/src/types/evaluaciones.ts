@@ -103,6 +103,14 @@ export interface DetalleResultadoRespuesta {
   es_acierto: boolean
 }
 
+export interface PreguntaErroneaResultado {
+  id: string
+  enunciado: string
+  opcion_marcada: string
+  opcion_correcta: string
+  retroalimentacion_especifica?: string | null
+}
+
 export interface PuntajeModuloResultado {
   modulo: string
   puntaje: number
@@ -112,11 +120,14 @@ export interface PuntajeModuloResultado {
 export interface ResumenResultados {
   intento_id: string
   estado_calificacion: string
+  puntaje?: number
   puntaje_saber_pro: number
   total_preguntas: number
   aciertos_brutos: number
+  plan_ia?: string | null
   plan_estudio_ia?: string | null
   detalle_respuestas?: DetalleResultadoRespuesta[]
+  preguntas_erroneas?: PreguntaErroneaResultado[]
   puntajes_por_modulo?: PuntajeModuloResultado[]
 }
 

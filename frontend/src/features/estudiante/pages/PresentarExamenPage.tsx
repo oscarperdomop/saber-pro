@@ -188,17 +188,28 @@ const PresentarExamenPage = () => {
       return []
     }
 
-    const filtradas = respuestas.filter((r) => r.pregunta.modulo_id.toString() === moduloId)
+    const filtradas = respuestas.filter((respuesta) => {
+      const pregunta = respuesta?.pregunta
+      if (!pregunta) {
+        return false
+      }
+      const moduloPregunta = pregunta.modulo_id
+      if (moduloPregunta === null || moduloPregunta === undefined) {
+        return false
+      }
+      return String(moduloPregunta) === moduloId
+    })
 
     return filtradas.map((respuesta) => {
-      const opcionesOriginales = respuesta.pregunta.opciones ? [...respuesta.pregunta.opciones] : []
+      const pregunta = respuesta.pregunta
+      const opcionesOriginales = pregunta?.opciones ? [...pregunta.opciones] : []
       const seedBase = `${intentoId ?? ''}:${respuesta.id}`
       const opcionesMezcladas = sortOptionsDeterministically(opcionesOriginales, seedBase)
 
       return {
         ...respuesta,
         pregunta: {
-          ...respuesta.pregunta,
+          ...pregunta,
           opciones: opcionesMezcladas,
         },
       }
@@ -329,7 +340,7 @@ const PresentarExamenPage = () => {
 
   if (!intentoId || !moduloId) {
     return (
-      <main className="flex h-screen w-screen items-center justify-center bg-usco-fondo p-6">
+      <main className="flex h-full w-full items-center justify-center bg-usco-fondo p-6">
         <div className="rounded-xl border border-red-300 bg-red-50 p-6 text-sm text-red-700">
           Parámetros de intento o módulo no válidos.
         </div>
@@ -338,7 +349,7 @@ const PresentarExamenPage = () => {
   }
 
   return (
-    <main className="h-screen w-screen overflow-hidden bg-usco-fondo">
+    <main className="h-full w-full overflow-hidden bg-usco-fondo">
       <div className="grid h-full grid-cols-1 lg:grid-cols-[18rem_1fr]">
         <aside className="hidden border-b border-usco-ocre/80 bg-white p-5 lg:block lg:border-b-0 lg:border-r">
           <h1 className="text-xl font-bold text-usco-vino">Preguntas del Módulo</h1>
@@ -439,18 +450,6 @@ const PresentarExamenPage = () => {
                     className="max-h-80 w-full rounded-lg border border-usco-ocre/80 bg-white object-contain p-2"
                   />
                 )}
-
-                {(respuestaActiva.pregunta.soporte_multimedia === 'LATEX' ||
-                  (!respuestaActiva.pregunta.soporte_multimedia &&
-                    Boolean(respuestaActiva.pregunta.codigo_latex))) &&
-                  respuestaActiva.pregunta.codigo_latex && (
-                    <div className="rounded-lg border border-usco-ocre/80 bg-usco-fondo p-4">
-                      <RichTextRenderer
-                        content={respuestaActiva.pregunta.codigo_latex}
-                        className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
-                      />
-                    </div>
-                  )}
 
                 <div className="mb-6 text-lg font-medium text-gray-800">
                   <RichTextRenderer

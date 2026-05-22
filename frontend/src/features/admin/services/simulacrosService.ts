@@ -72,6 +72,8 @@ const buildSimulacroRequestPayload = (payload: CrearSimulacroPayload) => {
     return reglasPorDificultad.filter((item) => item.cantidad_preguntas > 0)
   })
 
+  const programasDestino = payload.programa_id ? [payload.programa_id] : undefined
+
   return {
     titulo: payload.titulo,
     descripcion: payload.descripcion,
@@ -81,7 +83,7 @@ const buildSimulacroRequestPayload = (payload: CrearSimulacroPayload) => {
     mostrar_resultados_inmediatos: payload.mostrar_resultados_inmediatos,
     estado: payload.activo ? 'Activo' : 'Inactivo',
     reglas: reglasExpandidadas,
-    programas_destino: payload.programa_id ? [payload.programa_id] : [],
+    ...(programasDestino ? { programas_destino: programasDestino } : {}),
   }
 }
 
