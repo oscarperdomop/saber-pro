@@ -2,11 +2,15 @@
 import type { AxiosError } from 'axios'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Sparkles } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
 import { useNavigate, useParams } from 'react-router-dom'
+import SafeRichTextRenderer from '../../../components/ui/SafeRichTextRenderer'
 import SaberProLoader from '../../../components/ui/SaberProLoader'
 import estudianteService from '../services/estudianteService'
-import type { PuntajeModuloResultado, ResumenResultados } from '../../../types/evaluaciones'
+import type {
+  PreguntaErroneaResultado,
+  PuntajeModuloResultado,
+  ResumenResultados,
+} from '../../../types/evaluaciones'
 
 interface ApiErrorResponse {
   detail?: string
@@ -17,6 +21,7 @@ interface ApiErrorResponse {
 }
 
 const clampPercentil = (value: number): number => {
+  if (!Number.isFinite(value)) return 0
   if (value < 0) return 0
   if (value > 100) return 100
   return value
@@ -97,17 +102,23 @@ const ResultadosExamenPage = () => {
   })
 
   useEffect(() => {
+    if (data?.plan_ia) {
+      setPlanIA(data.plan_ia)
+      return
+    }
+
     if (data?.plan_estudio_ia) {
       setPlanIA(data.plan_estudio_ia)
     }
-  }, [data?.plan_estudio_ia])
+  }, [data?.plan_ia, data?.plan_estudio_ia])
 
   const generarPlanMutation = useMutation<
     { plan: string },
     AxiosError<ApiErrorResponse>,
-    string
+    { intentoId: string; forzar?: boolean }
   >({
-    mutationFn: estudianteService.generarPlanEstudioIA,
+    mutationFn: ({ intentoId: id, forzar }) =>
+      estudianteService.generarPlanEstudioIA(id, { forzar }),
     onSuccess: (response) => {
       setPlanIA(response.plan)
     },
@@ -181,8 +192,14 @@ const ResultadosExamenPage = () => {
     )
   }
 
-  const modulos: PuntajeModuloResultado[] = data.puntajes_por_modulo ?? []
-  const groupPercentil = clampPercentil(Math.round((data.puntaje_saber_pro / 300) * 100))
+  const modulos: PuntajeModuloResultado[] = Array.isArray(data.puntajes_por_modulo)
+    ? (data.puntajes_por_modulo.filter((item) => item && typeof item === 'object') as PuntajeModuloResultado[])
+    : []
+  const preguntasErroneas: PreguntaErroneaResultado[] = Array.isArray(data.preguntas_erroneas)
+    ? (data.preguntas_erroneas.filter((item) => item && typeof item === 'object') as PreguntaErroneaResultado[])
+    : []
+  const puntajeGlobalNumerico = Number(data.puntaje_saber_pro ?? 0)
+  const groupPercentil = clampPercentil(Math.round((puntajeGlobalNumerico / 300) * 100))
 
   return (
     <section className="mx-auto w-full max-w-5xl space-y-5">
@@ -262,14 +279,14 @@ const ResultadosExamenPage = () => {
                     }`}
                   >
                     <td className="border-r-2 border-usco-gris/80 px-3 py-4 text-base font-medium leading-tight text-usco-gris md:text-lg">
-                      {modulo.modulo}
+                      {String(modulo.modulo ?? 'General')}
                     </td>
                     <td className="border-r-2 border-usco-gris/80 px-3 py-4 text-center text-2xl font-bold text-usco-vino md:text-3xl">
-                      {modulo.puntaje}
+                      {Number(modulo.puntaje ?? 0)}
                     </td>
                     <td className="px-3 py-3">
                       <PercentileScale
-                        percentil={modulo.percentil}
+                        percentil={Number(modulo.percentil ?? 0)}
                         groupPercentil={groupPercentil}
                       />
                     </td>
@@ -302,44 +319,110 @@ const ResultadosExamenPage = () => {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-usco-vino to-red-800 p-4">
-          <h3 className="flex items-center gap-2 text-lg font-bold text-white">
-            <Sparkles className="h-5 w-5" />
-            Tutor Virtual IA: Tu Plan de Mejora
-          </h3>
-          {!planIA && (
+      <section className="grid h-auto grid-cols-1 gap-6 lg:h-[80vh] lg:grid-cols-2">
+        <article className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-lg border border-gray-200 border-t-4 border-t-usco-vino bg-white shadow-sm">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-gray-50 p-4">
+            <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+              <Sparkles className="h-5 w-5 text-usco-vino" />
+              Plan de Estudio IA
+            </h3>
             <button
               type="button"
-              onClick={() => intentoId && generarPlanMutation.mutate(intentoId)}
+              onClick={() =>
+                intentoId &&
+                generarPlanMutation.mutate({
+                  intentoId,
+                  forzar: Boolean(planIA),
+                })
+              }
               disabled={generarPlanMutation.isPending || !intentoId}
-              className="rounded bg-white px-4 py-2 font-semibold text-usco-vino transition hover:bg-red-50 disabled:opacity-50"
+              className="rounded bg-usco-vino px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-900 disabled:opacity-50"
             >
-              {generarPlanMutation.isPending ? 'Analizando respuestas...' : 'Generar mi Plan'}
+              {generarPlanMutation.isPending
+                ? 'Analizando...'
+                : planIA
+                  ? 'Regenerar Plan'
+                  : 'Generar Plan'}
             </button>
-          )}
-        </div>
+          </header>
 
-        <div className="p-6">
-          {planIA ? (
-            <article className="prose prose-sm max-w-none prose-headings:text-usco-vino prose-strong:text-usco-gris prose-p:text-usco-gris prose-li:text-usco-gris">
-              <ReactMarkdown>{planIA}</ReactMarkdown>
-            </article>
-          ) : (
-            <div className="py-8 text-center text-gray-500">
-              Haz clic en el botón de arriba para que la Inteligencia Artificial analice tus
-              errores y te cree una ruta de estudio personalizada.
-            </div>
-          )}
+          <div className="flex-grow overflow-y-auto p-6">
+            {planIA ? (
+              <SafeRichTextRenderer
+                content={planIA}
+                className="prose-sm prose-headings:text-usco-vino prose-strong:text-usco-gris prose-p:text-usco-gris prose-li:text-usco-gris"
+              />
+            ) : (
+              <div className="py-8 text-center text-gray-500">
+                Genera tu plan para recibir una ruta personalizada de mejora.
+              </div>
+            )}
 
-          {generarPlanMutation.isError && (
-            <p className="mt-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
-              {generarPlanMutation.error.response?.data?.detail ??
-                generarPlanMutation.error.response?.data?.detalle ??
-                'No fue posible generar el plan de estudio con IA en este momento.'}
-            </p>
-          )}
-        </div>
+            {generarPlanMutation.isError && (
+              <p className="mt-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+                {generarPlanMutation.error.response?.data?.detail ??
+                  generarPlanMutation.error.response?.data?.detalle ??
+                  'No fue posible generar el plan de estudio con IA en este momento.'}
+              </p>
+            )}
+          </div>
+        </article>
+
+        <article className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-lg border border-gray-200 border-t-4 border-t-gray-700 bg-white shadow-sm">
+          <header className="border-b bg-gray-50 p-4">
+            <h3 className="text-lg font-bold text-gray-800">
+              Preguntas Erróneas ({preguntasErroneas.length})
+            </h3>
+          </header>
+
+          <div className="flex-grow overflow-y-auto bg-gray-100">
+            {preguntasErroneas.length === 0 ? (
+              <div className="p-6 text-sm text-usco-gris">
+                No se registran preguntas erróneas para este intento.
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-200">
+                {preguntasErroneas.map((pregunta, index) => (
+                  <li
+                    key={`${pregunta.id}-${index}`}
+                    className="space-y-4 bg-white p-6 transition hover:bg-gray-50"
+                  >
+                    <SafeRichTextRenderer
+                      content={String(pregunta.enunciado ?? '')}
+                      className="prose-p:my-0 prose-p:font-semibold prose-p:text-gray-800 [&_.katex-display]:my-1"
+                    />
+
+                    <div className="rounded border-l-4 border-red-500 bg-red-50 p-3 text-sm">
+                      <span className="mb-1 block font-bold text-red-700">Tu respuesta:</span>
+                      <SafeRichTextRenderer
+                        content={String(pregunta.opcion_marcada ?? '')}
+                        className="prose-p:my-0 prose-p:text-red-600 [&_.katex-display]:my-1"
+                      />
+                    </div>
+
+                    <div className="rounded border-l-4 border-green-500 bg-green-50 p-3 text-sm">
+                      <span className="mb-1 block font-bold text-green-700">Respuesta correcta:</span>
+                      <SafeRichTextRenderer
+                        content={String(pregunta.opcion_correcta ?? '')}
+                        className="prose-p:my-0 prose-p:text-green-700 [&_.katex-display]:my-1"
+                      />
+                    </div>
+
+                    {pregunta.retroalimentacion_especifica && (
+                      <div className="rounded bg-blue-50 p-3 text-sm text-gray-700">
+                        <strong>Feedback IA:</strong>
+                        <SafeRichTextRenderer
+                          content={String(pregunta.retroalimentacion_especifica ?? '')}
+                          className="mt-1 prose-p:my-0 prose-p:text-gray-700 [&_.katex-display]:my-1"
+                        />
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </article>
       </section>
     </section>
   )

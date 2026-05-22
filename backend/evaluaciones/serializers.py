@@ -15,6 +15,7 @@ from .models import (
     ReglaExamen,
     RespuestaEstudiante,
 )
+from users.models import ProgramaAcademico
 from .utils import calcular_hash_md5_latex, compilar_fragmento_latex, normalizar_texto
 
 
@@ -411,6 +412,12 @@ class ReglaExamenSerializer(serializers.ModelSerializer):
 class PlantillaExamenAdminSerializer(serializers.ModelSerializer):
     reglas = ReglaExamenSerializer(many=True)
     tiene_intentos = serializers.SerializerMethodField()
+    programas_destino = serializers.PrimaryKeyRelatedField(
+        queryset=ProgramaAcademico.objects.all(),
+        many=True,
+        required=False,
+        allow_empty=True,
+    )
 
     class Meta:
         model = PlantillaExamen
@@ -646,6 +653,7 @@ class RespuestaEstudianteDetalleSerializer(serializers.ModelSerializer):
             'pregunta',
             'opcion_seleccionada',
             'texto_respuesta_abierta',
+            'retroalimentacion_ia',
             'marcada_para_revision',
         ]
 
@@ -737,7 +745,7 @@ class RevisionRespuestaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RespuestaEstudiante
-        fields = ['id', 'pregunta', 'opcion_seleccionada', 'es_acierto']
+        fields = ['id', 'pregunta', 'opcion_seleccionada', 'es_acierto', 'retroalimentacion_ia']
 
     def get_es_acierto(self, obj):
         if obj.opcion_seleccionada_id and obj.opcion_seleccionada:

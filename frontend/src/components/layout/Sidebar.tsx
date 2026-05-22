@@ -136,10 +136,12 @@ const Sidebar = ({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] min-h-[100svh] max-h-[100dvh] flex-col overflow-hidden border-r border-usco-ocre/70 bg-white transition-all duration-300 overscroll-none ${
+        className={`z-40 flex min-h-0 flex-col overflow-hidden border-r border-usco-ocre/70 bg-white transition-all duration-300 overscroll-none ${
           isDrawerMode
-            ? `${isSidebarOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full shadow-xl'} w-72`
-            : `sticky top-0 z-10 h-screen max-h-screen translate-x-0 shadow-none ${isSidebarCollapsed ? 'w-20' : 'w-64'}`
+            ? `fixed inset-y-0 left-0 h-[100dvh] min-h-[100svh] max-h-[100dvh] ${
+                isSidebarOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full shadow-xl'
+              } w-72`
+            : `relative h-full shrink-0 translate-x-0 shadow-none ${isSidebarCollapsed ? 'w-20' : 'w-64'}`
         }`}
       >
         <div className="flex h-16 items-center border-b border-usco-ocre/70 px-4 lg:px-5">

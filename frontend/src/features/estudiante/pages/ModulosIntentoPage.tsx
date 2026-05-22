@@ -72,23 +72,32 @@ const ModulosIntentoPage = () => {
     const grouped = new Map<number, ModuloResumen>()
 
     respuestas.forEach((respuesta) => {
-      const moduloId = respuesta.pregunta.modulo_id
+      const pregunta = respuesta?.pregunta
+      if (!pregunta) {
+        return
+      }
+
+      const moduloId = Number(pregunta.modulo_id)
+      if (!Number.isFinite(moduloId)) {
+        return
+      }
       const existing = grouped.get(moduloId)
 
       if (existing) {
         existing.totalPreguntas += 1
-        if (respuesta.opcion_seleccionada !== null) {
+        if (respuesta.opcion_seleccionada !== null && respuesta.opcion_seleccionada !== '') {
           existing.respondidas += 1
         }
         existing.progreso = Math.round((existing.respondidas / existing.totalPreguntas) * 100)
         return
       }
 
-      const respondidasInicial = respuesta.opcion_seleccionada !== null ? 1 : 0
+      const respondidasInicial =
+        respuesta.opcion_seleccionada !== null && respuesta.opcion_seleccionada !== '' ? 1 : 0
 
       grouped.set(moduloId, {
         moduloId,
-        nombre: respuesta.pregunta.modulo_nombre,
+        nombre: String(pregunta.modulo_nombre ?? 'Módulo'),
         totalPreguntas: 1,
         respondidas: respondidasInicial,
         progreso: Math.round((respondidasInicial / 1) * 100),

@@ -197,7 +197,7 @@ const CrearSimulacroPage = () => {
     setFormError('')
 
     if (!titulo.trim() || !descripcion.trim()) {
-      window.alert('Debes completar el titulo y la descripcion.')
+      window.alert('Debes completar el título y la descripción.')
       return
     }
 
@@ -207,7 +207,7 @@ const CrearSimulacroPage = () => {
     }
 
     if (!esParaTodos && !programaSeleccionado) {
-      window.alert('Debes seleccionar un programa especifico.')
+      window.alert('Debes seleccionar un programa específico.')
       return
     }
 
@@ -221,7 +221,7 @@ const CrearSimulacroPage = () => {
     const hoy = new Date()
 
     if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
-      window.alert('Las fechas no tienen un formato valido.')
+      window.alert('Las fechas no tienen un formato válido.')
       return
     }
 
@@ -292,7 +292,7 @@ const CrearSimulacroPage = () => {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-usco-gris">Titulo</span>
+            <span className="mb-1 block text-sm font-semibold text-usco-gris">Título</span>
             <input
               type="text"
               value={titulo}
@@ -315,7 +315,7 @@ const CrearSimulacroPage = () => {
           </label>
 
           <label className="block md:col-span-2">
-            <span className="mb-1 block text-sm font-semibold text-usco-gris">Descripcion</span>
+            <span className="mb-1 block text-sm font-semibold text-usco-gris">Descripción</span>
             <textarea
               value={descripcion}
               onChange={(event) => setDescripcion(event.target.value)}
@@ -371,7 +371,7 @@ const CrearSimulacroPage = () => {
         </div>
 
         <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <h3 className="mb-3 text-base font-bold text-usco-gris">Publico Objetivo</h3>
+          <h3 className="mb-3 text-base font-bold text-usco-gris">Público Objetivo</h3>
 
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
             <label className="flex cursor-pointer items-center gap-2 text-sm text-usco-gris">
@@ -385,7 +385,7 @@ const CrearSimulacroPage = () => {
                 }}
                 className="text-usco-vino focus:ring-usco-vino"
               />
-              <span>Todos los Programas (Prueba Generica)</span>
+              <span>Todos los Programas (Prueba Genérica)</span>
             </label>
 
             <label className="flex cursor-pointer items-center gap-2 text-sm text-usco-gris">
@@ -396,7 +396,7 @@ const CrearSimulacroPage = () => {
                 onChange={() => setEsParaTodos(false)}
                 className="text-usco-vino focus:ring-usco-vino"
               />
-              <span>Programa Especifico</span>
+              <span>Programa Específico</span>
             </label>
           </div>
 
@@ -435,7 +435,7 @@ const CrearSimulacroPage = () => {
         <hr className="my-6 border-gray-300" />
 
         <section className="space-y-4">
-          <h3 className="text-lg font-bold text-usco-vino">Reglas de Composicion del Examen</h3>
+          <h3 className="text-lg font-bold text-usco-vino">Reglas de Composición del Examen</h3>
 
           {isLoadingModulos && (
             <p className="rounded-xl border border-usco-ocre/70 bg-white p-3 text-sm text-usco-gris">
@@ -450,7 +450,6 @@ const CrearSimulacroPage = () => {
                 'No fue posible cargar los módulos.'}
             </p>
           )}
-
           {!isLoadingModulos && !isErrorModulos && reglas.length === 0 && (
             <p className="rounded-xl border border-usco-ocre/70 bg-usco-fondo/60 p-3 text-sm text-usco-gris">
               Aún no has agregado módulos para este simulacro.
@@ -498,7 +497,7 @@ const CrearSimulacroPage = () => {
                         onChange={() => toggleModoDistribucion(index)}
                         className="rounded text-usco-vino focus:ring-usco-vino"
                       />
-                      Distribucion Automatica (Facil, Media, Alta)
+                      Distribución automática (fácil, media, alta)
                     </label>
 
                     {regla.distribucion_automatica && (
@@ -518,7 +517,7 @@ const CrearSimulacroPage = () => {
 
                   <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
                     <label className="block rounded-xl border border-green-200 bg-green-50 p-2">
-                      <span className="mb-1 block text-xs font-semibold text-green-800">Cant. Facil</span>
+                      <span className="mb-1 block text-xs font-semibold text-green-800">Cant. fácil</span>
                       <input
                         type="number"
                         min={0}
@@ -535,7 +534,7 @@ const CrearSimulacroPage = () => {
                     </label>
 
                     <label className="block rounded-xl border border-yellow-200 bg-yellow-50 p-2">
-                      <span className="mb-1 block text-xs font-semibold text-yellow-800">Cant. Media</span>
+                      <span className="mb-1 block text-xs font-semibold text-yellow-800">Cant. media</span>
                       <input
                         type="number"
                         min={0}
@@ -552,7 +551,7 @@ const CrearSimulacroPage = () => {
                     </label>
 
                     <label className="block rounded-xl border border-red-200 bg-red-50 p-2">
-                      <span className="mb-1 block text-xs font-semibold text-red-800">Cant. Alta</span>
+                      <span className="mb-1 block text-xs font-semibold text-red-800">Cant. alta</span>
                       <input
                         type="number"
                         min={0}

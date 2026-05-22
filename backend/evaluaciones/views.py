@@ -12,7 +12,7 @@ import google.generativeai as genai
 import pandas as pd
 from django.conf import settings
 from django.core.cache import cache
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Avg, Case, Count, DurationField, ExpressionWrapper, F, FloatField, Q, Value, When
 from django.db.models.functions import Cast
 from django.http import HttpResponse
@@ -61,6 +61,7 @@ from .serializers import (
     RespuestaEstudianteDetalleSerializer,
     RespuestaEstudianteUpdateSerializer,
 )
+from .services import generar_feedback_intento_ia
 
 logger = logging.getLogger(__name__)
 
@@ -2749,69 +2750,100 @@ class EstudianteExamenViewSet(viewsets.ReadOnlyModelViewSet):
 
         return queryset.filter(programas_destino__isnull=True).distinct()
 
+    @staticmethod
+    def _inicializar_intento_desde_reglas(intento, plantilla):
+        modulos_creados = set()
+        preguntas_agregadas = set()
+
+        for regla in plantilla.reglas.select_related('modulo', 'categoria').all():
+            preguntas_qs = Pregunta.objects.filter(
+                modulo=regla.modulo,
+                estado='Publicada',
+            )
+
+            if regla.nivel_dificultad and regla.nivel_dificultad != 'Balanceada':
+                preguntas_qs = preguntas_qs.filter(nivel_dificultad=regla.nivel_dificultad)
+
+            if regla.categoria_id:
+                preguntas_qs = preguntas_qs.filter(categoria=regla.categoria)
+
+            if preguntas_agregadas:
+                preguntas_qs = preguntas_qs.exclude(id__in=preguntas_agregadas)
+
+            preguntas = list(
+                preguntas_qs.distinct().order_by('?')[: regla.cantidad_preguntas]
+            )
+
+            if len(preguntas) < regla.cantidad_preguntas:
+                raise ValueError(
+                    f'No hay suficientes preguntas publicadas para la regla {regla.id}.'
+                )
+
+            if regla.modulo_id not in modulos_creados:
+                IntentoModulo.objects.create(
+                    intento=intento,
+                    modulo=regla.modulo,
+                    estado='Pendiente',
+                )
+                modulos_creados.add(regla.modulo_id)
+
+            for pregunta in preguntas:
+                if pregunta.id in preguntas_agregadas:
+                    continue
+                RespuestaEstudiante.objects.create(
+                    intento=intento,
+                    pregunta=pregunta,
+                )
+                preguntas_agregadas.add(pregunta.id)
+
     @action(detail=True, methods=['post'])
     def iniciar_intento(self, request, pk=None):
         plantilla = self.get_object()
 
         try:
             with transaction.atomic():
-                intento, created = IntentoExamen.objects.get_or_create(
-                    estudiante=request.user,
-                    plantilla_examen=plantilla,
-                    defaults={'estado': 'En Progreso'}
-                )
+                try:
+                    intento = IntentoExamen.objects.select_for_update().get(
+                        estudiante=request.user,
+                        plantilla_examen=plantilla,
+                    )
+                    created = False
+                except IntentoExamen.DoesNotExist:
+                    intento = IntentoExamen.objects.create(
+                        estudiante=request.user,
+                        plantilla_examen=plantilla,
+                        estado='En Progreso',
+                    )
+                    created = True
+                except IntentoExamen.MultipleObjectsReturned:
+                    intento = (
+                        IntentoExamen.objects.select_for_update()
+                        .filter(estudiante=request.user, plantilla_examen=plantilla)
+                        .order_by('-fecha_inicio', '-id')
+                        .first()
+                    )
+                    created = False
 
-                if not created:
-                    return Response({'detalle': 'Intento ya iniciado'}, status=status.HTTP_400_BAD_REQUEST)
-
-                modulos_creados = set()
-                preguntas_agregadas = set()
-
-                for regla in plantilla.reglas.select_related('modulo', 'categoria').all():
-                    preguntas_qs = Pregunta.objects.filter(
-                        modulo=regla.modulo,
-                        estado='Publicada',
+                if not created and intento.estado == 'Finalizado':
+                    return Response(
+                        {'detalle': 'Ya presentaste este simulacro.'},
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
-                    if regla.nivel_dificultad and regla.nivel_dificultad != 'Balanceada':
-                        preguntas_qs = preguntas_qs.filter(nivel_dificultad=regla.nivel_dificultad)
+                # Soporta intentos precreados (por ejemplo, auto-asignados por signal) sin respuestas.
+                if not intento.respuestas.exists():
+                    self._inicializar_intento_desde_reglas(intento, plantilla)
+                    return Response({'intento_id': str(intento.id)}, status=status.HTTP_201_CREATED)
 
-                    if regla.categoria_id:
-                        preguntas_qs = preguntas_qs.filter(categoria=regla.categoria)
-
-                    if preguntas_agregadas:
-                        preguntas_qs = preguntas_qs.exclude(id__in=preguntas_agregadas)
-
-                    preguntas = list(
-                        preguntas_qs.distinct().order_by('?')[: regla.cantidad_preguntas]
-                    )
-
-                    if len(preguntas) < regla.cantidad_preguntas:
-                        raise ValueError(
-                            f'No hay suficientes preguntas publicadas para la regla {regla.id}.'
-                        )
-
-                    if regla.modulo_id not in modulos_creados:
-                        IntentoModulo.objects.create(
-                            intento=intento,
-                            modulo=regla.modulo,
-                            estado='Pendiente',
-                        )
-                        modulos_creados.add(regla.modulo_id)
-
-                    for pregunta in preguntas:
-                        if pregunta.id in preguntas_agregadas:
-                            continue
-                        RespuestaEstudiante.objects.create(
-                            intento=intento,
-                            pregunta=pregunta,
-                        )
-                        preguntas_agregadas.add(pregunta.id)
+                return Response({'intento_id': str(intento.id)}, status=status.HTTP_200_OK)
 
         except ValueError as exc:
             return Response({'detalle': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        return Response({'intento_id': str(intento.id)}, status=status.HTTP_201_CREATED)
+        except IntegrityError:
+            return Response(
+                {'detalle': 'No se pudo iniciar el intento por un conflicto de datos. Intenta nuevamente.'},
+                status=status.HTTP_409_CONFLICT,
+            )
 
 
 class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
@@ -2844,6 +2876,87 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
 
         total_aciertos = Decimal(aciertos_multiples) + puntaje_ensayos
         return round((float(total_aciertos) / total_preguntas) * 300)
+
+    @staticmethod
+    def _resolver_preguntas_erroneas(respuestas):
+        preguntas_erroneas = []
+
+        for respuesta in respuestas:
+            pregunta = respuesta.pregunta
+
+            # Opcion multiple.
+            if pregunta.limite_palabras is None:
+                es_acierto = bool(
+                    respuesta.opcion_seleccionada_id
+                    and respuesta.opcion_seleccionada
+                    and respuesta.opcion_seleccionada.es_correcta
+                )
+                if es_acierto:
+                    continue
+
+                opcion_marcada = (
+                    str(getattr(respuesta.opcion_seleccionada, 'texto', '') or '').strip()
+                    if respuesta.opcion_seleccionada_id
+                    else ''
+                )
+                opcion_marcada = opcion_marcada or 'Sin respuesta seleccionada'
+
+                opcion_correcta_obj = next(
+                    (
+                        opcion
+                        for opcion in pregunta.opciones.all()
+                        if bool(getattr(opcion, 'es_correcta', False))
+                    ),
+                    None,
+                )
+                opcion_correcta = str(getattr(opcion_correcta_obj, 'texto', '') or '').strip()
+                opcion_correcta = opcion_correcta or 'No configurada'
+
+            # Ensayo.
+            else:
+                es_acierto = bool(
+                    respuesta.puntaje_calificado is not None and float(respuesta.puntaje_calificado) > 0
+                )
+                if es_acierto:
+                    continue
+
+                opcion_marcada = str(getattr(respuesta, 'texto_respuesta_abierta', '') or '').strip()
+                opcion_marcada = opcion_marcada or 'Sin respuesta registrada'
+                opcion_correcta = 'Respuesta abierta evaluada por rubrica'
+
+            preguntas_erroneas.append(
+                {
+                    'id': str(pregunta.id),
+                    'enunciado': str(pregunta.enunciado or '').strip(),
+                    'opcion_marcada': opcion_marcada,
+                    'opcion_correcta': opcion_correcta,
+                    'retroalimentacion_especifica': str(respuesta.retroalimentacion_ia or '').strip() or None,
+                }
+            )
+
+        return preguntas_erroneas
+
+    @staticmethod
+    def _sanitizar_plan_para_estudiante(plan_texto):
+        texto = str(plan_texto or '')
+        if not texto.strip():
+            return ''
+
+        # 1) Elimina UUIDs (IDs internos) completos.
+        texto = re.sub(
+            r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b',
+            '',
+            texto,
+        )
+
+        # 2) Limpia etiquetas tipo "ID respuesta: ..." en una linea.
+        texto = re.sub(r'(?im)^\s*ID\s*respuesta\s*:\s*.*$', '', texto)
+        texto = re.sub(r'(?im)\(\s*ID\s*respuesta\s*:\s*.*?\)', '', texto)
+
+        # 3) Compacta espacios/saltos de linea sobrantes por limpieza.
+        texto = re.sub(r'[ \t]{2,}', ' ', texto)
+        texto = re.sub(r'\n{3,}', '\n\n', texto)
+        return texto.strip()
 
     @action(detail=True, methods=['get'])
     def cargar_respuestas(self, request, pk=None):
@@ -2884,35 +2997,45 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
 
             intento.estado = 'Pendiente Calificacion' if ensayos_pendientes else 'Finalizado'
             intento.fecha_finalizacion = timezone.now()
-            intento.save()
+            intento.save(update_fields=['estado', 'fecha_finalizacion'])
+            generar_feedback_intento_ia(intento.id)
 
         return Response({'estado': intento.estado})
-
     @action(detail=True, methods=['post'])
     def generar_plan_estudio(self, request, pk=None):
         intento = self.get_object()
+        forzar_regeneracion = str(request.data.get('forzar') or '').strip().lower() in [
+            '1',
+            'true',
+            'yes',
+            'on',
+            'si',
+            's?',
+        ]
 
-        if intento.plan_estudio_ia:
-            return Response({'plan': intento.plan_estudio_ia}, status=status.HTTP_200_OK)
+        if intento.plan_estudio_ia and not forzar_regeneracion:
+            plan_limpio = self._sanitizar_plan_para_estudiante(intento.plan_estudio_ia)
+            if plan_limpio != (intento.plan_estudio_ia or ''):
+                intento.plan_estudio_ia = plan_limpio
+                intento.save(update_fields=['plan_estudio_ia'])
+            return Response({'plan': plan_limpio}, status=status.HTTP_200_OK)
 
         respuestas = intento.respuestas.select_related(
             'pregunta__modulo',
             'pregunta__competencia',
             'pregunta__categoria',
             'opcion_seleccionada',
-        )
+        ).prefetch_related('pregunta__opciones')
 
         respuestas_malas = []
         for respuesta in respuestas:
             pregunta = respuesta.pregunta
 
             if pregunta.limite_palabras is None:
-                # Opcion multiple: sin seleccionar o seleccion incorrecta cuenta como falla.
                 if not respuesta.opcion_seleccionada_id or not respuesta.opcion_seleccionada.es_correcta:
                     respuestas_malas.append(respuesta)
                 continue
 
-            # Ensayo: solo se considera falla si ya fue calificado en 0 o menos.
             if respuesta.puntaje_calificado is not None and float(respuesta.puntaje_calificado) <= 0:
                 respuestas_malas.append(respuesta)
 
@@ -2927,50 +3050,113 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'plan': mensaje}, status=status.HTTP_200_OK)
 
         debilidades = {}
+        fallos_para_prompt = []
         for respuesta in respuestas_malas:
-            modulo_nombre = respuesta.pregunta.modulo.nombre
+            pregunta = respuesta.pregunta
+            modulo_nombre = str(getattr(pregunta.modulo, 'nombre', '') or 'General').strip()
+            categoria_nombre = (
+                str(getattr(pregunta.categoria, 'nombre', '') or 'General').strip()
+                if pregunta.categoria_id
+                else 'General'
+            )
             competencia_nombre = (
-                respuesta.pregunta.competencia.nombre
-                if respuesta.pregunta.competencia_id
+                str(getattr(pregunta.competencia, 'nombre', '') or 'General').strip()
+                if pregunta.competencia_id
                 else 'General'
             )
             debilidades.setdefault(modulo_nombre, set()).add(competencia_nombre)
+
+            if pregunta.limite_palabras is None:
+                opcion_marcada = (
+                    str(getattr(respuesta.opcion_seleccionada, 'texto', '') or '').strip()
+                    if respuesta.opcion_seleccionada_id
+                    else ''
+                )
+                opcion_marcada = opcion_marcada or 'Sin respuesta seleccionada'
+
+                opcion_correcta_obj = next(
+                    (
+                        opcion
+                        for opcion in pregunta.opciones.all()
+                        if bool(getattr(opcion, 'es_correcta', False))
+                    ),
+                    None,
+                )
+                opcion_correcta = str(getattr(opcion_correcta_obj, 'texto', '') or '').strip()
+                opcion_correcta = opcion_correcta or 'No configurada'
+            else:
+                opcion_marcada = str(getattr(respuesta, 'texto_respuesta_abierta', '') or '').strip()
+                opcion_marcada = opcion_marcada or 'Sin respuesta registrada'
+                opcion_correcta = 'Respuesta abierta evaluada por rubrica'
+
+            fallos_para_prompt.append(
+                {
+                    'modulo': modulo_nombre,
+                    'categoria': categoria_nombre,
+                    'competencia': competencia_nombre,
+                    'enunciado': str(getattr(pregunta, 'enunciado', '') or '').strip(),
+                    'marcada': opcion_marcada,
+                    'correcta': opcion_correcta,
+                }
+            )
 
         resumen_fallos = '\n'.join(
             [
                 f"- Modulo {modulo}: Fallo en competencias como {', '.join(sorted(competencias))}"
                 for modulo, competencias in debilidades.items()
             ]
-        )
+        ) or '- Sin resumen disponible'
+
+        fallos_para_prompt = fallos_para_prompt[:8]
+        bloques_fallos = []
+        for index, fallo in enumerate(fallos_para_prompt, start=1):
+            bloques_fallos.append(
+                '\n'.join(
+                    [
+                        f"Pregunta errada #{index}",
+                        f"Modulo: {fallo['modulo']}",
+                        f"Categoria: {fallo['categoria']}",
+                        f"Competencia: {fallo['competencia']}",
+                        f"Enunciado: {fallo['enunciado']}",
+                        f"El estudiante marco: {fallo['marcada']}",
+                        f"Respuesta correcta: {fallo['correcta']}",
+                    ]
+                )
+            )
+        fallos_detallados = '\n\n'.join(bloques_fallos)
 
         puntaje_global = self._calcular_puntaje_saber_pro(intento)
 
         prompt = f"""
-      Eres un tutor experto en pruebas ICFES Saber Pro. Un estudiante ha fallado preguntas en tu área.
+Eres un tutor experto en pruebas ICFES Saber Pro.
+Tu objetivo es crear un plan de refuerzo TOTALMENTE basado en las preguntas incorrectas reales de este estudiante.
+No inventes ejercicios desconectados: explica y corrige sus errores reales, uno por uno.
 
-      Puntaje obtenido: {puntaje_global}
-      Áreas de fallo exactas: {resumen_fallos}
+PUNTAJE OBTENIDO: {puntaje_global}
+AREAS DE FALLO: {resumen_fallos}
 
-      Tu objetivo no es darle consejos generales ni motivación vacía. Tu objetivo es ENSEÑARLE a resolver sus errores AHORA MISMO.
-      Crea una micro-lección de tutoría en formato Markdown estructurada estrictamente de la siguiente manera:
+PREGUNTAS INCORRECTAS REALES:
+{fallos_detallados}
 
-      ### 💡 ¿Por qué es importante esto?
-      (Explica en un párrafo corto y directo, sin rodeos, qué significa esta competencia en la vida real o en la prueba).
+INSTRUCCIONES OBLIGATORIAS:
+1) Responde en Markdown claro y ordenado.
+2) Debes incluir una seccion de refuerzo por CADA pregunta errada listada arriba.
+3) En cada pregunta errada, incluye:
+   - Error detectado (que interpreto mal el estudiante).
+   - Solucion paso a paso (minimo 4 pasos numerados y accionables).
+   - Regla de verificacion rapida (como evitar ese error en examen).
+   - Mini ejercicio muy similar + su respuesta explicada.
+4) Si hay expresiones matematicas, usa LaTeX entre $...$ para que el frontend lo renderice.
+5) No des consejos generales vacios ni cronogramas. Prioriza correccion de errores reales.
+6) No muestres IDs internos, UUIDs, ni referencias tecnicas del sistema.
 
-      ### 🔍 Concepto Clave (Repaso Rápido)
-      (Explica el concepto matemático, de lectura o lógica que el estudiante necesita saber para no volver a fallar. Usa ejemplos cortos. Si falló en gráficas, explícale cómo leer los ejes X y Y).
-
-      ### 🏋️‍♂️ Gimnasio Mental: Ejercicios Prácticos
-      (Crea 3 ejercicios de práctica RÁPIDOS y directos basados en las competencias donde falló. Plantea el problema y haz la pregunta).
-      * **Ejercicio 1:** [Planteamiento del problema de nivel básico]
-      * **Ejercicio 2:** [Planteamiento del problema de nivel medio]
-      * **Ejercicio 3:** [Planteamiento del problema de nivel alto]
-
-      ### ✅ Respuestas Explicadas
-      (Proporciona la solución paso a paso de los 3 ejercicios anteriores para que el estudiante pueda autoevaluarse inmediatamente).
-
-      No incluyas cronogramas de días, no lo mandes a buscar en otras páginas, no uses frases cliché extensas. Sé un profesor al grano, práctico y enfocado en la resolución de problemas.
-      """
+ESTRUCTURA MINIMA ESPERADA:
+# Diagnostico Personalizado
+# Refuerzo Pregunta por Pregunta
+## Pregunta 1
+## Pregunta 2
+# Cierre de Verificacion
+"""
 
         try:
             genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -2982,6 +3168,7 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
             if not plan_generado:
                 raise ValueError('La IA no devolvio contenido para el plan.')
 
+            plan_generado = self._sanitizar_plan_para_estudiante(plan_generado)
             intento.plan_estudio_ia = plan_generado
             intento.save(update_fields=['plan_estudio_ia'])
 
@@ -3001,7 +3188,11 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             intento = (
                 IntentoExamen.objects.select_related('plantilla_examen')
-                .prefetch_related('respuestas__opcion_seleccionada', 'respuestas__pregunta')
+                .prefetch_related(
+                    'respuestas__opcion_seleccionada',
+                    'respuestas__pregunta',
+                    'respuestas__pregunta__opciones',
+                )
                 .get(pk=pk, estudiante=request.user)
             )
         except IntentoExamen.DoesNotExist:
@@ -3031,12 +3222,15 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
                 {
                     'intento_id': str(intento.id),
                     'estado_calificacion': 'Parcial' if ensayos_pendientes else 'Definitiva',
+                    'puntaje': 0,
                     'puntaje_saber_pro': 0,
                     'total_preguntas': 0,
                     'aciertos_brutos': 0,
                     'detalle_respuestas': [],
+                    'preguntas_erroneas': [],
                     'puntajes_por_modulo': [],
-                    'plan_estudio_ia': intento.plan_estudio_ia,
+                    'plan_ia': self._sanitizar_plan_para_estudiante(intento.plan_estudio_ia),
+                    'plan_estudio_ia': self._sanitizar_plan_para_estudiante(intento.plan_estudio_ia),
                 },
                 status=status.HTTP_200_OK,
             )
@@ -3053,6 +3247,7 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
 
         total_aciertos = Decimal(aciertos_multiples) + puntaje_ensayos
         puntaje_normalizado = round((float(total_aciertos) / total_preguntas) * 300)
+        preguntas_erroneas = self._resolver_preguntas_erroneas(respuestas)
 
         modulos_data = []
         modulos_stats = intento.respuestas.values('pregunta__modulo__nombre').annotate(
@@ -3078,12 +3273,15 @@ class IntentoExamenViewSet(viewsets.ReadOnlyModelViewSet):
             {
                 'intento_id': str(intento.id),
                 'estado_calificacion': 'Parcial' if ensayos_pendientes else 'Definitiva',
+                'puntaje': puntaje_normalizado,
                 'puntaje_saber_pro': puntaje_normalizado,
                 'total_preguntas': total_preguntas,
                 'aciertos_brutos': float(total_aciertos),
                 'detalle_respuestas': RevisionRespuestaSerializer(respuestas, many=True).data,
+                'preguntas_erroneas': preguntas_erroneas,
                 'puntajes_por_modulo': modulos_data,
-                'plan_estudio_ia': intento.plan_estudio_ia,
+                'plan_ia': self._sanitizar_plan_para_estudiante(intento.plan_estudio_ia),
+                'plan_estudio_ia': self._sanitizar_plan_para_estudiante(intento.plan_estudio_ia),
             },
             status=status.HTTP_200_OK,
         )

@@ -71,7 +71,7 @@ const MainLayout = () => {
   }, [isDrawerMode, isSidebarOpen])
 
   return (
-    <div className={`min-h-[100dvh] bg-usco-fondo ${isDrawerMode ? '' : 'flex min-h-screen'}`}>
+    <div className={`h-full overflow-hidden bg-usco-fondo ${isDrawerMode ? '' : 'flex'}`}>
       <Sidebar
         isSidebarOpen={isSidebarOpen}
         isSidebarCollapsed={isSidebarCollapsed}
@@ -79,14 +79,14 @@ const MainLayout = () => {
         onCloseMobileSidebar={() => setIsSidebarOpen(false)}
       />
 
-      <div className={`flex min-h-[100dvh] flex-1 flex-col ${isDrawerMode ? '' : 'min-h-screen'}`}>
+      <div className="flex min-h-0 flex-1 flex-col">
         <Header
           onOpenMobileSidebar={() => setIsSidebarOpen(true)}
           onToggleSidebarCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
           isSidebarCollapsed={isSidebarCollapsed}
           isDrawerMode={isDrawerMode}
         />
-        <main className="flex-1 bg-usco-fondo px-4 py-5 sm:px-6 lg:px-8">
+        <main className="min-h-0 flex-1 overflow-y-auto bg-usco-fondo px-4 py-5 sm:px-6 lg:px-8">
           <Outlet key={`${location.pathname}${location.search}`} />
         </main>
       </div>

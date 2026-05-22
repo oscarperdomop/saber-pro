@@ -34,10 +34,10 @@ const isLikelyPureLatexExpression = (value: string): boolean => {
   })
 }
 
-const normalizeMathContent = (rawContent: string): string => {
+const normalizeMathContent = (rawContent: unknown): string => {
   if (!rawContent) return ''
 
-  let normalized = rawContent
+  let normalized = String(rawContent)
 
   // Soporta sintaxis LaTeX \(...\), \[...\], además de $...$ / $$...$$.
   normalized = normalized.replace(/\\\\\(([\s\S]*?)\\\\\)/g, (_, expr: string) => {
@@ -67,7 +67,10 @@ const RichTextRenderer = ({ content, className = '' }: RichTextRendererProps) =>
 
   return (
     <div className={`prose max-w-none text-inherit ${className}`}>
-      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+      <ReactMarkdown
+        remarkPlugins={[remarkMath]}
+        rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: 'ignore' }]]}
+      >
         {normalizedContent}
       </ReactMarkdown>
     </div>
